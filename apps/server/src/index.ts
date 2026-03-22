@@ -1,9 +1,11 @@
 import "dotenv/config";
+import http from "http";
 import express from "express";
 import cors from "cors";
 import { prisma } from "./lib/prisma";
 import { logger } from "./lib/logger";
 import { checkRedisHealth, redisClient } from "./lib/redis";
+import { initSocketServer } from "./lib/socket";
 import { errorHandler } from "./lib/errorHandler";
 import projectsRouter from "./modules/projects/projects.router";
 import tasksRouter from "./modules/tasks/tasks.router";
@@ -12,11 +14,11 @@ import agentsRouter from "./agents/agent.router";
 import { bootstrapAgents } from "./agents/agent.service";
 import { taskQueue, taskQueueEvents } from "./queue/queue";
 
-// Import worker so it registers itself and starts listening
+// Worker registers itself and starts listening
 import "./queue/worker";
 
 const app = express();
-const PORT = process.env.PORT ?? 4000;
+const PORT = Number(process.env.PORT ?? 4000);
 
 app.use(cors({ origin: process.env.CORS_ORIGIN ?? "http://localhost:3000" }));
 app.use(express.json());
@@ -33,16 +35,22 @@ app.get("/health", async (_req, res) => {
     prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
     checkRedisHealth(),
   ]);
-
   const status = dbOk && redisOk ? "ok" : "degraded";
   res.status(status === "ok" ? 200 : 503).json({
     status,
-    services: { db: dbOk ? "connected" : "disconnected", redis: redisOk ? "connected" : "disconnected" },
+    services: {
+      db: dbOk ? "connected" : "disconnected",
+      redis: redisOk ? "connected" : "disconnected",
+    },
     timestamp: new Date().toISOString(),
   });
 });
 
 app.use(errorHandler);
+
+// ── HTTP + Socket.io server ───────────────────────────────────────────────────
+const httpServer = http.createServer(app);
+initSocketServer(httpServer);
 
 // ── Graceful shutdown ────────────────────────────────────────────────────────
 async function shutdown(signal: string) {
@@ -53,8 +61,10 @@ async function shutdown(signal: string) {
     redisClient.quit(),
     prisma.$disconnect(),
   ]);
-  logger.info("Server shut down cleanly");
-  process.exit(0);
+  httpServer.close(() => {
+    logger.info("Server shut down cleanly");
+    process.exit(0);
+  });
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -66,8 +76,9 @@ async function bootstrap() {
   await prisma.$connect();
   logger.info("Database connected");
 
-  app.listen(PORT, () => {
+  httpServer.listen(PORT, () => {
     logger.info(`Server running on http://localhost:${PORT}`);
+    logger.info(`Socket.io listening on ws://localhost:${PORT}`);
   });
 }
 

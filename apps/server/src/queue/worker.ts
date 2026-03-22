@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma";
 import { QUEUE_NAME, TaskJobData, TaskJobResult } from "./queue";
 import { dispatchPipeline } from "../agents/agent.dispatcher";
 import { bootstrapAgents } from "../agents/agent.service";
+import { emitter } from "../lib/emitter";
 
 // Register all agents before the worker starts processing
 bootstrapAgents();
@@ -94,6 +95,12 @@ worker.on("active", (job) => {
 
 worker.on("progress", (job, progress) => {
   logger.debug("Job progress", { jobId: job.id, taskId: job.data.taskId, progress });
+  emitter.jobProgress({
+    taskId: job.data.taskId,
+    projectId: job.data.projectId,
+    jobId: job.id ?? "",
+    progress: typeof progress === "number" ? progress : 0,
+  });
 });
 
 worker.on("completed", (job, result) => {
