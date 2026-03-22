@@ -12,6 +12,7 @@ import tasksRouter from "./modules/tasks/tasks.router";
 import aiRouter from "./modules/ai/ai.router";
 import agentsRouter from "./agents/agent.router";
 import observabilityRouter from "./modules/observability/observability.router";
+import filesRouter from "./modules/files/files.router";
 import { bootstrapAgents } from "./agents/agent.service";
 import { taskQueue, taskQueueEvents } from "./queue/queue";
 
@@ -30,6 +31,7 @@ app.use("/api/tasks", tasksRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/agents", agentsRouter);
 app.use("/api/observe", observabilityRouter);
+app.use("/api/files", filesRouter);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get("/health", async (_req, res) => {
