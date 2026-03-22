@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@adw/ui": "*",
+    "@monaco-editor/react": "^4.6.0",
     "@xyflow/react": "^12.0.0",
     "dagre": "^0.8.5",
     "next": "^14.0.0",

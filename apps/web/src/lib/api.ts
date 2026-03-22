@@ -9,6 +9,12 @@ import type {
   ObsLog,
   AgentRunRow,
   TimelineRow,
+  ProjectFile,
+  FileVersionMeta,
+  FileVersion,
+  CreateFilePayload,
+  UpdateFilePayload,
+  RenameFilePayload,
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -65,5 +71,24 @@ export const api = {
       request<TimelineRow[]>(`/api/observe/timeline${projectId ? `?projectId=${projectId}` : ""}`),
     errors: (limit?: number) =>
       request<ObsLog[]>(`/api/observe/errors${limit ? `?limit=${limit}` : ""}`),
+  },
+  files: {
+    list: (projectId: string) =>
+      request<ProjectFile[]>(`/api/files?projectId=${projectId}`),
+    get: (id: string) => request<ProjectFile>(`/api/files/${id}`),
+    create: (data: CreateFilePayload) =>
+      request<ProjectFile>("/api/files", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: UpdateFilePayload) =>
+      request<ProjectFile>(`/api/files/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    rename: (id: string, data: RenameFilePayload) =>
+      request<ProjectFile>(`/api/files/${id}/rename`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<void>(`/api/files/${id}`, { method: "DELETE" }),
+    listVersions: (id: string) =>
+      request<FileVersionMeta[]>(`/api/files/${id}/versions`),
+    getVersion: (id: string, versionId: string) =>
+      request<FileVersion>(`/api/files/${id}/versions/${versionId}`),
+    restoreVersion: (id: string, versionId: string) =>
+      request<ProjectFile>(`/api/files/${id}/versions/${versionId}/restore`, { method: "POST" }),
   },
 };

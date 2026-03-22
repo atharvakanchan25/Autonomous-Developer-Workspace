@@ -113,6 +113,56 @@ export interface TimelineRow {
   stages: TimelineStage[];
 }
 
+// ── File editor ──────────────────────────────────────────────────────────────
+
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  path: string;
+  name: string;
+  language: string;
+  content: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { versions: number };
+}
+
+export interface FileVersion {
+  id: string;
+  fileId: string;
+  content: string;
+  size: number;
+  label?: string | null;
+  createdAt: string;
+}
+
+export interface FileVersionMeta {
+  id: string;
+  size: number;
+  label?: string | null;
+  createdAt: string;
+}
+
+export interface CreateFilePayload {
+  projectId: string;
+  path: string;
+  name: string;
+  language?: string;
+  content?: string;
+}
+
+export interface UpdateFilePayload {
+  content: string;
+  createVersion?: boolean;
+  versionLabel?: string;
+}
+
+export interface RenameFilePayload {
+  path: string;
+  name: string;
+}
+
 export interface SummaryStats {
   tasks: {
     total: number;

@@ -15,6 +15,7 @@ model Project {
   updatedAt   DateTime    @updatedAt
   tasks       Task[]
   aiPlanLogs  AiPlanLog[]
+  files       ProjectFile[]
 
   @@map("projects")
 }
@@ -48,6 +49,39 @@ model AiPlanLog {
   createdAt   DateTime @default(now())
 
   @@map("ai_plan_logs")
+}
+
+// ── File storage ─────────────────────────────────────────────────────────────
+model ProjectFile {
+  id        String        @id @default(cuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  path      String        // e.g. "src/index.ts"
+  name      String        // filename only, e.g. "index.ts"
+  language  String        @default("plaintext")
+  content   String        @default("")
+  size      Int           @default(0) // bytes
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  versions  FileVersion[]
+
+  @@unique([projectId, path])
+  @@index([projectId])
+  @@map("project_files")
+}
+
+// Lightweight version history — stores full content snapshots
+model FileVersion {
+  id        String      @id @default(cuid())
+  fileId    String
+  file      ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  content   String
+  size      Int
+  label     String?     // optional human label, e.g. "before refactor"
+  createdAt DateTime    @default(now())
+
+  @@index([fileId, createdAt])
+  @@map("file_versions")
 }
 
 // Persists every agent execution — input, output, status, duration

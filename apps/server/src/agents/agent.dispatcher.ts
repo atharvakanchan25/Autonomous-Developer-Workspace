@@ -12,6 +12,55 @@ const PIPELINE_ORDER: AgentType[] = [
   AgentType.CODE_REVIEWER,
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function persistArtifacts(
+  projectId: string,
+  results: DispatchResult[],
+): Promise<void> {
+  for (const result of results) {
+    if (result.status !== "COMPLETED" || !result.result) continue;
+    for (const artifact of result.result.artifacts) {
+      const path = artifact.filename;
+      const existing = await prisma.projectFile.findUnique({
+        where: { projectId_path: { projectId, path } },
+      });
+      if (existing) {
+        // Snapshot old content then overwrite
+        if (existing.content) {
+          await prisma.fileVersion.create({
+            data: {
+              fileId: existing.id,
+              content: existing.content,
+              size: existing.size,
+              label: `Before agent overwrite (${result.agentType})`,
+            },
+          });
+        }
+        await prisma.projectFile.update({
+          where: { id: existing.id },
+          data: {
+            content: artifact.content,
+            size: Buffer.byteLength(artifact.content, "utf8"),
+            language: artifact.language ?? "plaintext",
+          },
+        });
+      } else {
+        await prisma.projectFile.create({
+          data: {
+            projectId,
+            path,
+            name: artifact.filename,
+            language: artifact.language ?? "plaintext",
+            content: artifact.content,
+            size: Buffer.byteLength(artifact.content, "utf8"),
+          },
+        });
+      }
+    }
+  }
+}
+
 // ── Single agent dispatch ─────────────────────────────────────────────────────
 
 export async function dispatchAgent(
@@ -222,6 +271,11 @@ export async function dispatchPipeline(taskId: string): Promise<DispatchResult[]
     message: `Pipeline completed for "${task.title}" — all ${results.length} agents passed`,
     timestamp: new Date().toISOString(),
   });
+
+  // Persist all generated artifacts as project files
+  await persistArtifacts(projectId, results).catch((err) =>
+    logger.error("Failed to persist artifacts", { taskId, error: (err as Error).message }),
+  );
 
   logger.info("Pipeline completed", { taskId, stages: results.length });
   return results;
