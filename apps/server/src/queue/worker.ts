@@ -4,6 +4,11 @@ import { redisConnectionOptions } from "../lib/redis";
 import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 import { QUEUE_NAME, TaskJobData, TaskJobResult } from "./queue";
+import { dispatchPipeline } from "../agents/agent.dispatcher";
+import { bootstrapAgents } from "../agents/agent.service";
+
+// Register all agents before the worker starts processing
+bootstrapAgents();
 
 // ── Task processor ───────────────────────────────────────────────────────────
 
@@ -46,40 +51,28 @@ async function processTask(job: Job<TaskJobData, TaskJobResult>): Promise<TaskJo
   await job.updateProgress(10);
   logger.info("Task marked IN_PROGRESS", { jobId: job.id, taskId });
 
-  // ── 2. Simulate async work (replace with real logic) ──────────────────────
-  // In production: call an LLM, run a build, deploy, etc.
-  await job.updateProgress(50);
-  await simulateWork(job);
+  // ── 2. Run the full agent pipeline ────────────────────────────────────────
+  // CODE_GENERATOR → TEST_GENERATOR → CODE_REVIEWER
+  // Each agent updates the task status; pipeline handles COMPLETED/FAILED.
+  await job.updateProgress(30);
+  const pipelineResults = await dispatchPipeline(taskId);
   await job.updateProgress(90);
 
-  // ── 3. Transition: IN_PROGRESS → COMPLETED ────────────────────────────────
-  await prisma.task.update({
-    where: { id: taskId },
-    data: { status: "COMPLETED" },
-  });
+  const allPassed = pipelineResults.every((r) => r.status === "COMPLETED");
+  const finalStatus = allPassed ? "COMPLETED" : "FAILED";
 
+  // dispatchPipeline already updated task status — just reflect it in the job result
   await job.updateProgress(100);
 
   const durationMs = Date.now() - startedAt;
-  logger.info("Task job completed", { jobId: job.id, taskId, durationMs });
+  logger.info("Task job finished", { jobId: job.id, taskId, finalStatus, durationMs });
 
   return {
     taskId,
-    status: "COMPLETED",
+    status: finalStatus,
     processedAt: new Date().toISOString(),
     durationMs,
   };
-}
-
-// Simulates async work — replace with real task execution logic
-async function simulateWork(_job: Job<TaskJobData>): Promise<void> {
-  const delay = 1000 + Math.random() * 2000; // 1–3 s
-  await new Promise((resolve) => setTimeout(resolve, delay));
-
-  // Simulate ~10% failure rate to exercise retry logic
-  if (Math.random() < 0.1) {
-    throw new Error("Simulated transient failure — will retry");
-  }
 }
 
 // ── Worker instance ──────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ model Task {
   // Self-relation for DAG dependencies
   dependsOn    Task[]     @relation("TaskDependencies")
   dependents   Task[]     @relation("TaskDependencies")
+  agentRuns    AgentRun[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -47,6 +48,35 @@ model AiPlanLog {
   createdAt   DateTime @default(now())
 
   @@map("ai_plan_logs")
+}
+
+// Persists every agent execution — input, output, status, duration
+model AgentRun {
+  id          String        @id @default(cuid())
+  taskId      String
+  task        Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agentType   AgentType
+  status      AgentRunStatus @default(RUNNING)
+  input       String        // JSON-serialised AgentContext
+  output      String?       // JSON-serialised AgentResult
+  errorMsg    String?
+  durationMs  Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("agent_runs")
+}
+
+enum AgentType {
+  CODE_GENERATOR
+  TEST_GENERATOR
+  CODE_REVIEWER
+}
+
+enum AgentRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }
 
 enum TaskStatus {

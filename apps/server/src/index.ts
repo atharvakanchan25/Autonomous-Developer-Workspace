@@ -8,6 +8,8 @@ import { errorHandler } from "./lib/errorHandler";
 import projectsRouter from "./modules/projects/projects.router";
 import tasksRouter from "./modules/tasks/tasks.router";
 import aiRouter from "./modules/ai/ai.router";
+import agentsRouter from "./agents/agent.router";
+import { bootstrapAgents } from "./agents/agent.service";
 import { taskQueue, taskQueueEvents } from "./queue/queue";
 
 // Import worker so it registers itself and starts listening
@@ -23,6 +25,7 @@ app.use(express.json());
 app.use("/api/projects", projectsRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/ai", aiRouter);
+app.use("/api/agents", agentsRouter);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get("/health", async (_req, res) => {
@@ -59,6 +62,7 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 async function bootstrap() {
+  bootstrapAgents();
   await prisma.$connect();
   logger.info("Database connected");
 
