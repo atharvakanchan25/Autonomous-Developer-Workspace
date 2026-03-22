@@ -37,11 +37,31 @@ export interface PipelineStagePayload {
   timestamp: string;
 }
 
+export interface CicdStageLog {
+  stage: string;
+  status: "running" | "passed" | "failed" | "skipped";
+  durationMs?: number;
+  detail?: string;
+}
+
+export interface DeploymentUpdatedPayload {
+  deploymentId: string;
+  projectId: string;
+  taskId?: string | null;
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
+  stage?: string;
+  previewUrl?: string | null;
+  errorMsg?: string | null;
+  log: CicdStageLog[];
+  updatedAt: string;
+}
+
 export interface ServerToClientEvents {
   "task:updated": (payload: TaskUpdatedPayload) => void;
   "agent:log": (payload: AgentLogPayload) => void;
   "job:progress": (payload: JobProgressPayload) => void;
   "pipeline:stage": (payload: PipelineStagePayload) => void;
+  "deployment:updated": (payload: DeploymentUpdatedPayload) => void;
 }
 
 export interface ClientToServerEvents {

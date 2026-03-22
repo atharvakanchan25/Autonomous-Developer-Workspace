@@ -2,7 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { getSocket } from "./socket";
-import type { AgentLogPayload, TaskUpdatedPayload, JobProgressPayload, PipelineStagePayload } from "./socket.events";
+import type {
+  AgentLogPayload,
+  TaskUpdatedPayload,
+  JobProgressPayload,
+  PipelineStagePayload,
+  DeploymentUpdatedPayload,
+} from "./socket.events";
 
 export type SocketStatus = "connecting" | "connected" | "disconnected";
 
@@ -12,6 +18,7 @@ export interface UseSocketOptions {
   onAgentLog?: (payload: AgentLogPayload) => void;
   onJobProgress?: (payload: JobProgressPayload) => void;
   onPipelineStage?: (payload: PipelineStagePayload) => void;
+  onDeploymentUpdated?: (payload: DeploymentUpdatedPayload) => void;
 }
 
 export function useSocket({
@@ -20,34 +27,19 @@ export function useSocket({
   onAgentLog,
   onJobProgress,
   onPipelineStage,
+  onDeploymentUpdated,
 }: UseSocketOptions): { status: SocketStatus } {
   const [status, setStatus] = useState<SocketStatus>("disconnected");
 
-  // Stable callback refs so we can safely add/remove listeners
-  const handleTaskUpdated = useCallback(
-    (p: TaskUpdatedPayload) => onTaskUpdated?.(p),
-    [onTaskUpdated],
-  );
-  const handleAgentLog = useCallback(
-    (p: AgentLogPayload) => onAgentLog?.(p),
-    [onAgentLog],
-  );
-  const handleJobProgress = useCallback(
-    (p: JobProgressPayload) => onJobProgress?.(p),
-    [onJobProgress],
-  );
-  const handlePipelineStage = useCallback(
-    (p: PipelineStagePayload) => onPipelineStage?.(p),
-    [onPipelineStage],
-  );
+  const handleTaskUpdated = useCallback((p: TaskUpdatedPayload) => onTaskUpdated?.(p), [onTaskUpdated]);
+  const handleAgentLog = useCallback((p: AgentLogPayload) => onAgentLog?.(p), [onAgentLog]);
+  const handleJobProgress = useCallback((p: JobProgressPayload) => onJobProgress?.(p), [onJobProgress]);
+  const handlePipelineStage = useCallback((p: PipelineStagePayload) => onPipelineStage?.(p), [onPipelineStage]);
+  const handleDeploymentUpdated = useCallback((p: DeploymentUpdatedPayload) => onDeploymentUpdated?.(p), [onDeploymentUpdated]);
 
   useEffect(() => {
     const socket = getSocket();
-
-    if (!socket.connected) {
-      setStatus("connecting");
-      socket.connect();
-    }
+    if (!socket.connected) { setStatus("connecting"); socket.connect(); }
 
     const onConnect = () => setStatus("connected");
     const onDisconnect = () => setStatus("disconnected");
@@ -58,6 +50,7 @@ export function useSocket({
     socket.on("agent:log", handleAgentLog);
     socket.on("job:progress", handleJobProgress);
     socket.on("pipeline:stage", handlePipelineStage);
+    socket.on("deployment:updated", handleDeploymentUpdated);
 
     if (socket.connected) setStatus("connected");
 
@@ -68,22 +61,16 @@ export function useSocket({
       socket.off("agent:log", handleAgentLog);
       socket.off("job:progress", handleJobProgress);
       socket.off("pipeline:stage", handlePipelineStage);
+      socket.off("deployment:updated", handleDeploymentUpdated);
     };
-  }, [handleTaskUpdated, handleAgentLog, handleJobProgress, handlePipelineStage]);
+  }, [handleTaskUpdated, handleAgentLog, handleJobProgress, handlePipelineStage, handleDeploymentUpdated]);
 
-  // Join / leave project room when projectId changes
   useEffect(() => {
     if (!projectId) return;
     const socket = getSocket();
-
     const joinRoom = () => socket.emit("room:join", projectId);
-
-    if (socket.connected) {
-      joinRoom();
-    } else {
-      socket.once("connect", joinRoom);
-    }
-
+    if (socket.connected) joinRoom();
+    else socket.once("connect", joinRoom);
     return () => {
       socket.emit("room:leave", projectId);
       socket.off("connect", joinRoom);

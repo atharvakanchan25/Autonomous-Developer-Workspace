@@ -1,7 +1,5 @@
 import type { TaskStatus } from "@prisma/client";
 
-// ── Server → Client events ────────────────────────────────────────────────────
-
 export interface TaskUpdatedPayload {
   taskId: string;
   projectId: string;
@@ -39,6 +37,25 @@ export interface PipelineStagePayload {
   timestamp: string;
 }
 
+export interface CicdStageLog {
+  stage: string;
+  status: "running" | "passed" | "failed" | "skipped";
+  durationMs?: number;
+  detail?: string;
+}
+
+export interface DeploymentUpdatedPayload {
+  deploymentId: string;
+  projectId: string;
+  taskId?: string | null;
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
+  stage?: string;
+  previewUrl?: string | null;
+  errorMsg?: string | null;
+  log: CicdStageLog[];
+  updatedAt: string;
+}
+
 // ── Typed maps for Socket.io generics ────────────────────────────────────────
 
 export interface ServerToClientEvents {
@@ -46,6 +63,7 @@ export interface ServerToClientEvents {
   "agent:log": (payload: AgentLogPayload) => void;
   "job:progress": (payload: JobProgressPayload) => void;
   "pipeline:stage": (payload: PipelineStagePayload) => void;
+  "deployment:updated": (payload: DeploymentUpdatedPayload) => void;
 }
 
 export interface ClientToServerEvents {
