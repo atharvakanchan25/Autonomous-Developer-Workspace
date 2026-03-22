@@ -6,11 +6,11 @@ A full-stack AI-powered development platform that takes a project description, b
 
 ## Features
 
-- **AI Plan Generation** — Describe your project and the LLM API generates a structured task plan with a dependency graph (DAG)
+- **AI Plan Generation** — Describe your project and the LLM generates a structured task plan with a dependency graph (DAG)
 - **Multi-Agent Pipeline** — Each task runs through three sequential agents:
-  - `CODE_GENERATOR` — produces TypeScript implementation code
-  - `TEST_GENERATOR` — writes tests for the generated code
-  - `CODE_REVIEWER` — reviews and annotates the code
+  - `CODE_GENERATOR` — produces Python implementation code
+  - `TEST_GENERATOR` — writes a pytest test suite for the generated code
+  - `CODE_REVIEWER` — reviews and scores the code with a structured markdown report
 - **Real-time Streaming** — Pipeline progress, agent logs, and CI/CD stage updates are pushed live via Socket.IO
 - **DAG Task Graph** — Interactive visual graph of tasks and their dependencies (React Flow)
 - **Code Editor** — Monaco-based in-browser editor with file explorer and version history
@@ -25,10 +25,11 @@ A full-stack AI-powered development platform that takes a project description, b
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 14, React 18, Tailwind CSS, React Flow, Monaco Editor, Socket.IO client |
-| Backend | Node.js, Express, TypeScript, Socket.IO, Zod |
-| AI | LLM API (e.g. Gemini / Groq / OpenAI) |
-| Database | Firebase Firestore (via `firebase-admin`) |
-| Monorepo | Turborepo, npm workspaces |
+| Backend | Python 3.11+, FastAPI, python-socketio, Uvicorn |
+| AI | Groq API — `llama-3.3-70b-versatile` |
+| Validation | Pydantic v2, pydantic-settings |
+| Database | Firebase Firestore (`firebase-admin`) |
+| Rate Limiting | slowapi |
 
 ---
 
@@ -37,56 +38,74 @@ A full-stack AI-powered development platform that takes a project description, b
 ```
 autonomous-developer-workspace/
 ├── apps/
-│   ├── server/          # Express API + agent pipeline + Socket.IO
-│   │   └── src/
-│   │       ├── agents/  # Agent runners, dispatcher, registry, LLM wrapper
-│   │       ├── modules/ # projects, tasks, ai, files, cicd, observability
-│   │       ├── queue/   # In-memory job queue + worker
-│   │       └── lib/     # Firestore, LLM client, Socket, Logger, config
-│   └── web/             # Next.js frontend
+│   ├── server-py/                  # Python FastAPI backend
+│   │   ├── src/
+│   │   │   ├── agents/             # Agent runners, dispatcher, registry, LLM wrapper
+│   │   │   │   └── runners/        # CodeGenerator, TestGenerator, CodeReviewer
+│   │   │   ├── modules/            # projects, tasks, ai, files, cicd, observability
+│   │   │   ├── queue/              # asyncio in-memory job queue + worker
+│   │   │   └── lib/                # Firestore, Groq client, Socket.IO, logger, config, utils
+│   │   ├── .env.example
+│   │   ├── requirements.txt
+│   │   └── run.py                  # Uvicorn entry point
+│   └── web/                        # Next.js 14 frontend
 │       └── src/
-│           ├── app/     # Pages: projects, tasks, graph, editor, deploy, observe
-│           ├── components/
-│           └── lib/     # API client, socket hooks, utilities
-└── packages/
-    ├── config/          # Shared ESLint + TypeScript configs
-    └── ui/              # Shared UI components
+│           ├── app/                # Pages: home, projects, tasks, graph, editor, deploy, observe
+│           ├── components/         # UI components
+│           └── lib/                # API client, socket hooks, utilities
 ```
 
 ---
 
 ## Prerequisites
 
-- Node.js >= 18
-- npm >= 10
-- An LLM API key (e.g. [Gemini](https://aistudio.google.com/app/apikey) / [Groq](https://console.groq.com) / [OpenAI](https://platform.openai.com))
-- A Firebase project with Firestore enabled and a service account key
+- **Python** >= 3.11
+- **Node.js** >= 18
+- **npm** >= 9
+- A **Groq API key** — get one free at [console.groq.com](https://console.groq.com)
+- A **Firebase project** with Firestore enabled and a service account key — [Firebase Console](https://console.firebase.google.com)
 
 ---
 
 ## Getting Started
 
-### 1. Clone the repo
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/autonomous-developer-workspace.git
-cd autonomous-developer-workspace
-npm install
+git clone https://github.com/atharvakanchan25/Autonomous-Developer-Workspace.git
+cd Autonomous-Developer-Workspace
 ```
 
-### 2. Configure the server
+### 2. Set up the Python backend
 
 ```bash
-cp apps/server/.env.example apps/server/.env
+cd apps/server-py
+
+# Create and activate virtual environment
+python -m venv .venv
+
+# Windows (PowerShell)
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# macOS / Linux
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Fill in `apps/server/.env`:
+### 3. Configure backend environment
+
+```bash
+copy .env.example .env        # Windows
+cp .env.example .env          # macOS / Linux
+```
+
+Fill in `apps/server-py/.env`:
 
 ```env
-NODE_ENV="development"
+APP_ENV="development"
 PORT=4000
 
-LLM_API_KEY="your-llm-api-key"
+GROQ_API_KEY="your-groq-api-key"
 
 FIREBASE_PROJECT_ID="your-firebase-project-id"
 FIREBASE_CLIENT_EMAIL="firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com"
@@ -98,77 +117,157 @@ RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX=200
 ```
 
-> **Never commit your `.env` file or Firebase service account JSON to version control.**
+> **Never commit your `.env` file.** It is already in `.gitignore`.
 
-### 3. Configure the web app
+### 4. Set up the Next.js frontend
 
 ```bash
-cp apps/web/.env.example apps/web/.env.local
+cd apps/web
+npm install
+copy .env.example .env.local   # Windows
+cp .env.example .env.local     # macOS / Linux
 ```
 
-Set the API and WebSocket URL (defaults to `http://localhost:4000`).
+`apps/web/.env.local` defaults are fine for local development:
 
-### 4. Run in development
+```env
+NEXT_PUBLIC_API_URL="http://localhost:4000"
+```
 
+### 5. Run the project
+
+Open **two terminals**:
+
+**Terminal 1 — Backend (port 4000):**
 ```bash
+cd apps/server-py
+
+# Windows
+.venv\Scripts\python.exe run.py
+
+# macOS / Linux
+.venv/bin/python run.py
+```
+
+**Terminal 2 — Frontend (port 3000):**
+```bash
+cd apps/web
 npm run dev
 ```
 
-This starts both the server (port `4000`) and the web app (port `3000`) in parallel via Turborepo.
+Open **http://localhost:3000** in your browser.
 
 ---
 
-## API Overview
+## API Reference
+
+### Projects
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/projects/` | List all projects |
+| `POST` | `/api/projects/` | Create a project |
+| `GET` | `/api/projects/{id}` | Get a project with its tasks |
+
+### Tasks
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/tasks/` | List tasks (optional `?projectId=`) |
+| `POST` | `/api/tasks/` | Create a task |
+| `GET` | `/api/tasks/{id}` | Get a task |
+| `PATCH` | `/api/tasks/{id}/status` | Update task status |
+
+### AI
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/ai/generate-plan` | Generate a task plan from a project description |
-| `GET` | `/api/projects` | List all projects |
-| `POST` | `/api/projects` | Create a project |
-| `GET` | `/api/tasks?projectId=` | List tasks for a project |
+
+### Agents
+
+| Method | Endpoint | Description |
+|---|---|---|
 | `POST` | `/api/agents/run` | Run a single agent or full pipeline on a task |
-| `GET` | `/api/agents/runs/:taskId` | Get all agent runs for a task |
-| `GET` | `/api/files?projectId=` | List project files |
-| `GET` | `/api/cicd/:projectId` | List deployments for a project |
-| `GET` | `/api/observe/:projectId` | Observability metrics |
-| `GET` | `/health` | Health check |
+| `GET` | `/api/agents/runs/{task_id}` | Get all agent runs for a task |
+| `GET` | `/api/agents/` | List all registered agents |
 
-### Socket.IO Events (server → client)
+### Files
 
-| Event | Description |
-|---|---|
-| `task:updated` | Task status changed |
-| `agent:log` | Agent log message |
-| `pipeline:stage` | Agent stage started / completed / failed |
-| `deployment:updated` | CI/CD stage progress |
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/files/?projectId=` | List project files (no content) |
+| `GET` | `/api/files/{id}` | Get a file with content |
+| `POST` | `/api/files/` | Create a file |
+| `PUT` | `/api/files/{id}` | Update file content |
+| `PATCH` | `/api/files/{id}/rename` | Rename / move a file |
+| `DELETE` | `/api/files/{id}` | Delete a file |
+| `GET` | `/api/files/{id}/versions` | List file version history |
+| `GET` | `/api/files/versions/{version_id}` | Get a specific version |
+| `POST` | `/api/files/{id}/versions/{version_id}/restore` | Restore a version |
+
+### CI/CD
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/cicd/deploy` | Trigger a CI/CD pipeline |
+| `GET` | `/api/cicd/deployments?projectId=` | List deployments for a project |
+| `GET` | `/api/cicd/deployments/{id}` | Get a deployment |
+
+### Observability
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/observe/summary` | Global stats (tasks, agent runs, errors) |
+| `GET` | `/api/observe/logs` | Paginated log query |
+| `GET` | `/api/observe/agents` | Recent agent activity |
+| `GET` | `/api/observe/timeline` | Execution timeline per task |
+| `GET` | `/api/observe/errors` | Recent error logs |
+
+### Health
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Server + Firestore health check |
 
 ---
 
-## Scripts
+## Socket.IO Events
 
-```bash
-npm run dev          # Start all apps in development mode
-npm run build        # Build all apps
-npm run lint         # Lint all packages
-npm run type-check   # TypeScript check across all packages
-npm run clean        # Remove build artifacts
-```
+The backend emits these events to project-scoped rooms (`project:{projectId}`).
+
+### Server → Client
+
+| Event | Payload | Description |
+|---|---|---|
+| `task:updated` | `{ taskId, projectId, status, title, updatedAt }` | Task status changed |
+| `agent:log` | `{ taskId, projectId, agentRunId, agentType, level, message, timestamp }` | Agent log line |
+| `pipeline:stage` | `{ taskId, projectId, agentType, stage, durationMs, summary, error, timestamp }` | Agent stage started / completed / failed |
+| `deployment:updated` | `{ deploymentId, projectId, status, stage, log, previewUrl, updatedAt }` | CI/CD stage progress |
+
+### Client → Server
+
+| Event | Payload | Description |
+|---|---|---|
+| `room:join` | `projectId` | Subscribe to a project's events |
+| `room:leave` | `projectId` | Unsubscribe from a project's events |
 
 ---
 
-## Environment Variables Reference
+## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `LLM_API_KEY` | LLM API key (e.g. Gemini / Groq / OpenAI) |
-| `FIREBASE_PROJECT_ID` | Firebase project ID |
-| `FIREBASE_CLIENT_EMAIL` | Firebase service account email |
-| `FIREBASE_PRIVATE_KEY` | Firebase service account private key |
-| `PORT` | Server port (default: `4000`) |
-| `CORS_ORIGIN` | Allowed CORS origin (default: `http://localhost:3000`) |
-| `LOG_LEVEL` | Winston log level (`info`, `debug`, `warn`, `error`) |
-| `RATE_LIMIT_WINDOW_MS` | Rate limit window in ms |
-| `RATE_LIMIT_MAX` | Max requests per window |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `APP_ENV` | No | `development` | Application environment |
+| `PORT` | No | `4000` | Server port |
+| `GROQ_API_KEY` | **Yes** | — | Groq API key |
+| `FIREBASE_PROJECT_ID` | **Yes** | — | Firebase project ID |
+| `FIREBASE_CLIENT_EMAIL` | **Yes** | — | Firebase service account email |
+| `FIREBASE_PRIVATE_KEY` | **Yes** | — | Firebase service account private key |
+| `CORS_ORIGIN` | No | `http://localhost:3000` | Allowed CORS origin |
+| `LOG_LEVEL` | No | `info` | Logging level (`debug`, `info`, `warning`, `error`) |
+| `RATE_LIMIT_WINDOW_MS` | No | `60000` | Rate limit window in milliseconds |
+| `RATE_LIMIT_MAX` | No | `200` | Max requests per window |
 
 ---
 
@@ -188,7 +287,7 @@ npm run clean        # Remove build artifacts
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Express Server (Node.js)                     │
+│                  FastAPI Server (Python)                        │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                      REST API Routes                    │   │
@@ -200,7 +299,7 @@ npm run clean        # Remove build artifacts
 │          ▼                  ▼                  ▼               │
 │  ┌───────────────┐  ┌──────────────┐  ┌──────────────────┐    │
 │  │  AI Service   │  │  Job Queue   │  │   CI/CD Service  │    │
-│  │ (plan gen)    │  │  + Worker    │  │ (test→build→     │    │
+│  │ (plan gen)    │  │(asyncio.Queue│  │ (test→build→     │    │
 │  └──────┬────────┘  └──────┬───────┘  │  deploy sim)     │    │
 │         │                  │          └────────┬─────────┘    │
 │         │                  ▼                   │               │
@@ -223,13 +322,12 @@ npm run clean        # Remove build artifacts
 │         └────────┐        │      ┌─────────────┘               │
 │                  ▼        ▼      ▼                             │
 │           ┌─────────────────────────┐                          │
-│           │       LLM API           │                          │
-│           │ (e.g. Gemini/Groq/      │                          │
-│           │       OpenAI)           │                          │
+│           │       Groq API          │                          │
+│           │  llama-3.3-70b-versatile│                          │
 │           └─────────────────────────┘                          │
 │                                                                 │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │                     Socket.IO Server                     │  │
+│  │                  python-socketio Server                  │  │
 │  │  task:updated · agent:log · pipeline:stage ·             │  │
 │  │  deployment:updated                                      │  │
 │  └──────────────────────────────────────────────────────────┘  │
@@ -242,6 +340,34 @@ npm run clean        # Remove build artifacts
 │   projects · tasks · agentRuns · projectFiles ·                 │
 │   fileVersions · deployments · aiPlanLogs                       │
 └─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Firestore Collections
+
+| Collection | Description |
+|---|---|
+| `projects` | Project metadata (name, description) |
+| `tasks` | Tasks with status, order, and dependency IDs |
+| `agentRuns` | Individual agent execution records with input/output |
+| `projectFiles` | Generated source files with content and language |
+| `fileVersions` | Version history snapshots for each file |
+| `deployments` | CI/CD pipeline runs with stage logs |
+| `aiPlanLogs` | Audit log of every LLM plan generation call |
+
+---
+
+## Frontend Scripts
+
+```bash
+cd apps/web
+
+npm run dev        # Start development server on port 3000
+npm run build      # Production build
+npm run start      # Start production server
+npm run lint       # ESLint
+npm run type-check # TypeScript check
 ```
 
 ---
