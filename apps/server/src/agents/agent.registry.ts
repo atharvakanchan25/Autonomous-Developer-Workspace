@@ -1,7 +1,7 @@
-import { AgentType } from "@prisma/client";
-import { IAgent } from "./agent.types";
+import { AgentType, IAgent } from "./agent.types";
 import { logger } from "../lib/logger";
 
+// simple in-memory registry — agents are registered once at startup
 const registry = new Map<AgentType, IAgent>();
 
 export function registerAgent(agent: IAgent): void {
@@ -16,8 +16,7 @@ export function getAgent(type: AgentType): IAgent {
   const agent = registry.get(type);
   if (!agent) {
     throw new Error(
-      `No agent registered for type "${type}". ` +
-      `Registered: [${[...registry.keys()].join(", ")}]`,
+      `No agent registered for type "${type}". Registered: [${[...registry.keys()].join(", ")}]`,
     );
   }
   return agent;

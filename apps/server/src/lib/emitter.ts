@@ -7,6 +7,7 @@ import type {
   DeploymentUpdatedPayload,
 } from "./socket.events";
 
+// thin helper so services don't have to call getIO() directly
 function toProject(projectId: string) {
   return getIO().to(`project:${projectId}`);
 }

@@ -1,5 +1,4 @@
-import { AgentType } from "@prisma/client";
-import { IAgent, AgentContext, AgentResult } from "../agent.types";
+import { AgentType, IAgent, AgentContext, AgentResult } from "../agent.types";
 import { callLlm } from "../agent.llm";
 
 export class CodeReviewerAgent implements IAgent {
@@ -8,12 +7,8 @@ export class CodeReviewerAgent implements IAgent {
   readonly description = "Reviews generated code and tests, produces a structured markdown report.";
 
   async run(ctx: AgentContext): Promise<AgentResult> {
-    const codeArtifact = ctx.previousOutputs?.CODE_GENERATOR?.artifacts.find(
-      (a) => a.type === "code",
-    );
-    const testArtifact = ctx.previousOutputs?.TEST_GENERATOR?.artifacts.find(
-      (a) => a.type === "test",
-    );
+    const codeArtifact = ctx.previousOutputs?.CODE_GENERATOR?.artifacts.find((a) => a.type === "code");
+    const testArtifact = ctx.previousOutputs?.TEST_GENERATOR?.artifacts.find((a) => a.type === "test");
 
     const codeSection = codeArtifact
       ? `\n\n## Implementation\n\`\`\`typescript\n${codeArtifact.content}\n\`\`\``
@@ -65,27 +60,20 @@ Overall score: X/10 with one-line justification.`,
       maxTokens: 2048,
     });
 
-    const filename = ctx.taskTitle
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 50) + "-review.md";
+    const filename =
+      ctx.taskTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 50) + "-review.md";
 
-    // Extract score from the report for the summary line
     const scoreMatch = content.match(/Score[:\s]+(\d+)\/10/i);
     const score = scoreMatch ? `${scoreMatch[1]}/10` : "N/A";
 
     return {
       agentType: this.type,
       summary: `Code review completed for "${ctx.taskTitle}" — Score: ${score}`,
-      artifacts: [
-        {
-          type: "review",
-          filename,
-          content,
-          language: "markdown",
-        },
-      ],
+      artifacts: [{ type: "review", filename, content, language: "markdown" }],
       rawLlmOutput: content,
       tokensUsed,
     };

@@ -1,6 +1,6 @@
 import winston from "winston";
 import path from "path";
-import { PrismaTransport } from "./prismaTransport";
+import { FirestoreTransport } from "./firestoreTransport";
 import { config } from "./config";
 
 const { combine, timestamp, errors, json, colorize, printf } = winston.format;
@@ -15,13 +15,11 @@ export const logger = winston.createLogger({
   format: combine(timestamp({ format: "YYYY-MM-DD HH:mm:ss" }), errors({ stack: true }), json()),
   defaultMeta: { service: "adw-server" },
   transports: [
+    // pretty console output in dev
     new winston.transports.Console({
-      format: combine(
-        colorize({ all: true }),
-        timestamp({ format: "HH:mm:ss" }),
-        consoleFormat,
-      ),
+      format: combine(colorize({ all: true }), timestamp({ format: "HH:mm:ss" }), consoleFormat),
     }),
+    // rolling file logs
     new winston.transports.File({
       filename: path.join("logs", "combined.log"),
       maxsize: 10 * 1024 * 1024,
@@ -35,6 +33,7 @@ export const logger = winston.createLogger({
       maxFiles: 5,
       tailable: true,
     }),
-    new PrismaTransport({ level: "info" }),
+    // persists INFO+ logs to Firestore for the observability dashboard
+    new FirestoreTransport({ level: "info" }),
   ],
 });

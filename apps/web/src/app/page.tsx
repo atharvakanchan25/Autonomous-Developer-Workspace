@@ -35,7 +35,8 @@ export default function HomePage() {
         name: description.trim().slice(0, 100),
         description: description.trim(),
       });
-      router.push(`/projects?created=${project.id}`);
+      await api.ai.generatePlan({ projectId: project.id, description: description.trim() });
+      router.push(`/graph?projectId=${project.id}`);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

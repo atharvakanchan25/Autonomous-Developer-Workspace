@@ -1,80 +1,65 @@
-import { TaskStatus } from "@prisma/client";
-import { prisma } from "../../lib/prisma";
+import { db } from "../../lib/firestore";
 import { notFound } from "../../lib/errors";
 import { emitter } from "../../lib/emitter";
-import { CreateTaskInput, UpdateTaskStatusInput } from "./tasks.schema";
+import { TaskStatus } from "./tasks.types";
+import type { CreateTaskInput, UpdateTaskStatusInput } from "./tasks.schema";
+
+export { TaskStatus };
 
 export async function getAllTasks(projectId?: string) {
-  return prisma.task.findMany({
-    where: projectId ? { projectId } : undefined,
-    orderBy: { createdAt: "desc" },
-    include: {
-      project: { select: { id: true, name: true } },
-      dependsOn: { select: { id: true, title: true } },
-    },
-  });
+  let query = db.collection("tasks").orderBy("createdAt", "desc") as FirebaseFirestore.Query;
+  if (projectId) query = query.where("projectId", "==", projectId);
+  const snap = await query.get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function getTaskById(id: string) {
-  const task = await prisma.task.findUnique({
-    where: { id },
-    include: {
-      project: { select: { id: true, name: true } },
-      dependsOn: { select: { id: true, title: true } },
-    },
-  });
-  if (!task) throw notFound("Task");
-  return task;
+  const doc = await db.collection("tasks").doc(id).get();
+  if (!doc.exists) throw notFound("Task");
+  return { id: doc.id, ...doc.data() };
 }
 
 export async function createTask(data: CreateTaskInput) {
-  const projectExists = await prisma.project.findUnique({
-    where: { id: data.projectId },
-    select: { id: true },
-  });
-  if (!projectExists) throw notFound("Project");
+  const projectDoc = await db.collection("projects").doc(data.projectId).get();
+  if (!projectDoc.exists) throw notFound("Project");
 
-  const task = await prisma.task.create({
-    data,
-    include: {
-      project: { select: { id: true, name: true } },
-      dependsOn: { select: { id: true, title: true } },
-    },
+  const now = new Date().toISOString();
+  const ref = await db.collection("tasks").add({
+    ...data,
+    status: TaskStatus.PENDING,
+    createdAt: now,
+    updatedAt: now,
   });
+
+  const task = { id: ref.id, ...data, status: TaskStatus.PENDING, createdAt: now, updatedAt: now };
 
   emitter.taskUpdated({
     taskId: task.id,
     projectId: task.projectId,
     status: task.status,
     title: task.title,
-    updatedAt: task.updatedAt.toISOString(),
+    updatedAt: now,
   });
 
   return task;
 }
 
 export async function updateTaskStatus(id: string, data: UpdateTaskStatusInput) {
-  const task = await prisma.task.findUnique({ where: { id }, select: { id: true } });
-  if (!task) throw notFound("Task");
+  const doc = await db.collection("tasks").doc(id).get();
+  if (!doc.exists) throw notFound("Task");
 
-  const updated = await prisma.task.update({
-    where: { id },
-    data,
-    include: {
-      project: { select: { id: true, name: true } },
-      dependsOn: { select: { id: true, title: true } },
-    },
-  });
+  const now = new Date().toISOString();
+  await db.collection("tasks").doc(id).update({ ...data, updatedAt: now });
+
+  const updated = { id, ...doc.data(), ...data, updatedAt: now } as Record<string, unknown>;
 
   emitter.taskUpdated({
-    taskId: updated.id,
-    projectId: updated.projectId,
-    status: updated.status,
-    title: updated.title,
-    updatedAt: updated.updatedAt.toISOString(),
+    taskId: id,
+    projectId: updated.projectId as string,
+    status: updated.status as string,
+    title: updated.title as string,
+    updatedAt: now,
   });
 
   return updated;
 }
-
-export { TaskStatus };

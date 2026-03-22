@@ -22,11 +22,7 @@ export function initSocketServer(httpServer: HttpServer): TypedIO {
   io = new SocketServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(
     httpServer,
     {
-      cors: {
-        origin: config.CORS_ORIGIN,
-        methods: ["GET", "POST"],
-      },
-      // Scalability: swap transports to ["websocket"] + Redis adapter for multi-instance
+      cors: { origin: config.CORS_ORIGIN, methods: ["GET", "POST"] },
       transports: ["websocket", "polling"],
     },
   );
@@ -34,7 +30,7 @@ export function initSocketServer(httpServer: HttpServer): TypedIO {
   io.on("connection", (socket) => {
     logger.info("Socket connected", { socketId: socket.id });
 
-    // Client joins a project room to receive scoped events
+    // clients join a project room to receive scoped events
     socket.on("room:join", (projectId: string) => {
       socket.join(`project:${projectId}`);
       logger.info("Socket joined room", { socketId: socket.id, projectId });

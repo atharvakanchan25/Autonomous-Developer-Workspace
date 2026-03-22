@@ -74,7 +74,7 @@ export const aiPlanResponseSchema = z
 
 // Incoming HTTP request body
 export const generatePlanSchema = z.object({
-  projectId: z.string().cuid("Invalid project ID"),
+  projectId: z.string().min(1, "Project ID is required"),
   description: z.string().min(10, "Description must be at least 10 characters").max(2000),
 });
 

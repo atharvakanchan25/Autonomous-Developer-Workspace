@@ -1,116 +1,75 @@
-import "dotenv/config";
-import { Worker, Job, UnrecoverableError } from "bullmq";
-import { redisConnectionOptions } from "../lib/redis";
+import { taskQueue, TaskJobData, Job } from "./queue";
 import { logger } from "../lib/logger";
-import { prisma } from "../lib/prisma";
-import { QUEUE_NAME, TaskJobData, TaskJobResult } from "./queue";
+import { db } from "../lib/firestore";
 import { dispatchPipeline } from "../agents/agent.dispatcher";
 import { bootstrapAgents } from "../agents/agent.service";
-import { emitter } from "../lib/emitter";
 import { runCicdPipeline } from "../modules/cicd/cicd.service";
 
+// register all agents before the queue starts processing
 bootstrapAgents();
 
-async function processTask(job: Job<TaskJobData, TaskJobResult>): Promise<TaskJobResult> {
-  const { taskId, projectId, title } = job.data;
+async function processJob(data: TaskJobData): Promise<void> {
+  const { taskId, projectId, title } = data;
   const startedAt = Date.now();
 
-  logger.info("Task job started", {
-    jobId: job.id, taskId, projectId, title,
-    attempt: job.attemptsMade + 1, maxAttempts: job.opts.attempts,
-  });
+  logger.info("Task job started", { taskId, projectId, title });
 
-  const task = await prisma.task.findUnique({ where: { id: taskId } });
-
-  if (!task) throw new UnrecoverableError(`Task ${taskId} not found in database`);
-
-  if (task.status === "COMPLETED") {
-    logger.warn("Task already completed, skipping", { jobId: job.id, taskId });
-    return { taskId, status: "COMPLETED", processedAt: new Date().toISOString(), durationMs: Date.now() - startedAt };
+  const taskDoc = await db.collection("tasks").doc(taskId).get();
+  if (!taskDoc.exists) {
+    logger.error("Task not found in Firestore — skipping", { taskId });
+    return;
   }
 
-  await prisma.task.update({ where: { id: taskId }, data: { status: "IN_PROGRESS" } });
-  await job.updateProgress(10);
-  logger.info("Task marked IN_PROGRESS", { jobId: job.id, taskId });
+  const task = taskDoc.data()!;
+  if (task.status === "COMPLETED") {
+    logger.warn("Task already completed, skipping", { taskId });
+    return;
+  }
 
-  await job.updateProgress(30);
+  await db.collection("tasks").doc(taskId).update({
+    status: "IN_PROGRESS",
+    updatedAt: new Date().toISOString(),
+  });
+
   const pipelineResults = await dispatchPipeline(taskId);
-  await job.updateProgress(90);
-
   const allPassed = pipelineResults.every((r) => r.status === "COMPLETED");
-  const finalStatus = allPassed ? "COMPLETED" : "FAILED";
 
-  // Auto-trigger CI/CD on successful task completion
+  // auto-trigger CI/CD when the full pipeline passes
   if (allPassed) {
     runCicdPipeline(projectId, taskId).catch((err) =>
       logger.error("CI/CD auto-trigger failed", { taskId, error: (err as Error).message }),
     );
   }
 
-  await job.updateProgress(100);
-
   const durationMs = Date.now() - startedAt;
-  logger.info("Task job finished", { jobId: job.id, taskId, finalStatus, durationMs });
-
-  return { taskId, status: finalStatus, processedAt: new Date().toISOString(), durationMs };
+  logger.info("Task job finished", { taskId, status: allPassed ? "COMPLETED" : "FAILED", durationMs });
 }
 
-const worker = new Worker<TaskJobData, TaskJobResult>(QUEUE_NAME, processTask, {
-  connection: redisConnectionOptions,
-  concurrency: 5,
-  limiter: { max: 20, duration: 10_000 },
-});
-
-worker.on("active", (job) => {
+// listen for jobs added to the in-memory queue and process them
+taskQueue.on("job:added", async (job: Job) => {
+  taskQueue.updateJob(job.id, { state: "active", processedOn: Date.now() });
   logger.info("Job active", { jobId: job.id, taskId: job.data.taskId });
-});
 
-worker.on("progress", (job, progress) => {
-  logger.debug("Job progress", { jobId: job.id, taskId: job.data.taskId, progress });
-  emitter.jobProgress({
-    taskId: job.data.taskId,
-    projectId: job.data.projectId,
-    jobId: job.id ?? "",
-    progress: typeof progress === "number" ? progress : 0,
-  });
-});
+  try {
+    await processJob(job.data);
+    taskQueue.updateJob(job.id, { state: "completed", finishedOn: Date.now() });
+    logger.info("Job completed", { jobId: job.id, taskId: job.data.taskId });
+  } catch (err) {
+    const errorMsg = (err as Error).message;
+    taskQueue.updateJob(job.id, { state: "failed", failedReason: errorMsg, finishedOn: Date.now() });
+    logger.error("Job failed", { jobId: job.id, taskId: job.data.taskId, error: errorMsg });
 
-worker.on("completed", (job, result) => {
-  logger.info("Job completed", { jobId: job.id, taskId: result.taskId, durationMs: result.durationMs });
-});
-
-worker.on("failed", async (job, err) => {
-  if (!job) return;
-  const isLastAttempt = job.attemptsMade >= (job.opts.attempts ?? 1);
-  logger.error("Job failed", {
-    jobId: job.id, taskId: job.data.taskId,
-    attempt: job.attemptsMade, maxAttempts: job.opts.attempts,
-    willRetry: !isLastAttempt, error: err.message,
-  });
-  if (isLastAttempt) {
-    try {
-      await prisma.task.update({ where: { id: job.data.taskId }, data: { status: "FAILED" } });
-      logger.warn("Task marked FAILED after exhausting retries", { jobId: job.id, taskId: job.data.taskId });
-    } catch (dbErr) {
-      logger.error("Failed to update task status to FAILED", { taskId: job.data.taskId, error: (dbErr as Error).message });
-    }
+    // mark the task as failed in Firestore so the UI reflects it
+    await db.collection("tasks").doc(job.data.taskId).update({
+      status: "FAILED",
+      updatedAt: new Date().toISOString(),
+    }).catch((dbErr) =>
+      logger.error("Failed to mark task as FAILED", {
+        taskId: job.data.taskId,
+        error: (dbErr as Error).message,
+      }),
+    );
   }
 });
 
-worker.on("stalled", (jobId: string) => { logger.warn("Job stalled — will be re-queued", { jobId }); });
-worker.on("error", (err) => { logger.error("Worker error", { error: err.message, stack: err.stack }); });
-
-async function shutdown(signal: string) {
-  logger.info(`Worker received ${signal} — shutting down gracefully`);
-  await worker.close();
-  await prisma.$disconnect();
-  logger.info("Worker shut down cleanly");
-  process.exit(0);
-}
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
-
-logger.info("Task worker started", { queue: QUEUE_NAME, concurrency: 5, pid: process.pid });
-
-export default worker;
+logger.info("Task worker started (in-memory queue)");

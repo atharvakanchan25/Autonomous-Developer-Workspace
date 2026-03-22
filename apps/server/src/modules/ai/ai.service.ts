@@ -1,5 +1,5 @@
-import { prisma } from "../../lib/prisma";
-import { openai } from "../../lib/openai";
+import { db } from "../../lib/firestore";
+import { genAI } from "../../lib/gemini";
 import { notFound, badRequest } from "../../lib/errors";
 import { SYSTEM_PROMPT, FEW_SHOT_EXAMPLE, buildUserPrompt } from "./ai.prompt";
 import { aiPlanResponseSchema, GeneratePlanInput, AiTask } from "./ai.schema";
@@ -7,21 +7,21 @@ import { aiPlanResponseSchema, GeneratePlanInput, AiTask } from "./ai.schema";
 // ── LLM call ────────────────────────────────────────────────────────────────
 
 async function callLlm(description: string): Promise<string> {
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0,          // deterministic output
-    max_tokens: 2048,
-    response_format: { type: "json_object" }, // enforces JSON mode
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      // Few-shot example so the model knows exactly what shape to produce
-      { role: "user", content: FEW_SHOT_EXAMPLE.input },
-      { role: "assistant", content: FEW_SHOT_EXAMPLE.output },
-      { role: "user", content: buildUserPrompt(description) },
-    ],
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    systemInstruction: SYSTEM_PROMPT + "\nRespond with valid JSON only, no markdown fences.",
   });
 
-  const content = completion.choices[0]?.message?.content;
+  const chat = model.startChat({
+    history: [
+      { role: "user", parts: [{ text: FEW_SHOT_EXAMPLE.input }] },
+      { role: "model", parts: [{ text: FEW_SHOT_EXAMPLE.output }] },
+    ],
+    generationConfig: { maxOutputTokens: 2048, temperature: 0 },
+  });
+
+  const result = await chat.sendMessage(buildUserPrompt(description));
+  const content = result.response.text();
   if (!content) throw badRequest("LLM returned an empty response");
   return content;
 }
@@ -31,7 +31,8 @@ async function callLlm(description: string): Promise<string> {
 function parseLlmResponse(raw: string) {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    parsed = JSON.parse(cleaned);
   } catch {
     throw badRequest("LLM response was not valid JSON");
   }
@@ -47,72 +48,52 @@ function parseLlmResponse(raw: string) {
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 
-async function persistPlan(
-  projectId: string,
-  tasks: AiTask[],
-  prompt: string,
-  rawResponse: string,
-) {
-  return prisma.$transaction(async (tx) => {
-    // 1. Create all tasks (without dependencies first)
-    const created = await Promise.all(
-      tasks.map((t) =>
-        tx.task.create({
-          data: {
-            title: t.title,
-            description: t.description,
-            order: t.order,
-            status: "PENDING",
-            projectId,
-          },
-        }),
-      ),
-    );
+async function persistPlan(projectId: string, tasks: AiTask[], prompt: string, rawResponse: string) {
+  const now = new Date().toISOString();
+  const batch = db.batch();
 
-    // Build key → DB id map
-    const keyToId = new Map<string, string>(
-      tasks.map((t, i) => [t.key, created[i]!.id]),
-    );
+  // Create task docs and collect refs
+  const taskRefs = tasks.map(() => db.collection("tasks").doc());
+  const keyToId = new Map<string, string>(tasks.map((t, i) => [t.key, taskRefs[i]!.id]));
 
-    // 2. Wire up dependencies now that all IDs exist
-    await Promise.all(
-      tasks
-        .filter((t) => t.dependsOn.length > 0)
-        .map((t) =>
-          tx.task.update({
-            where: { id: keyToId.get(t.key)! },
-            data: {
-              dependsOn: {
-                connect: t.dependsOn.map((depKey) => ({ id: keyToId.get(depKey)! })),
-              },
-            },
-          }),
-        ),
-    );
-
-    // 3. Write audit log
-    await tx.aiPlanLog.create({
-      data: { projectId, prompt, rawResponse, taskCount: tasks.length },
-    });
-
-    // 4. Return tasks with their resolved dependencies
-    return tx.task.findMany({
-      where: { projectId, id: { in: created.map((t) => t.id) } },
-      orderBy: { order: "asc" },
-      include: { dependsOn: { select: { id: true, title: true } } },
+  tasks.forEach((t, i) => {
+    batch.set(taskRefs[i]!, {
+      title: t.title,
+      description: t.description,
+      order: t.order,
+      status: "PENDING",
+      projectId,
+      dependsOn: t.dependsOn.map((depKey) => keyToId.get(depKey)!),
+      createdAt: now,
+      updatedAt: now,
     });
   });
+
+  // Write audit log
+  const logRef = db.collection("aiPlanLogs").doc();
+  batch.set(logRef, { projectId, prompt, rawResponse, taskCount: tasks.length, createdAt: now });
+
+  await batch.commit();
+
+  return tasks.map((t, i) => ({
+    id: taskRefs[i]!.id,
+    title: t.title,
+    description: t.description,
+    order: t.order,
+    status: "PENDING",
+    projectId,
+    dependsOn: t.dependsOn.map((depKey) => ({ id: keyToId.get(depKey)!, title: tasks.find((x) => x.key === depKey)!.title })),
+    createdAt: now,
+    updatedAt: now,
+  }));
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export async function generatePlan(input: GeneratePlanInput) {
-  // Verify project exists
-  const project = await prisma.project.findUnique({
-    where: { id: input.projectId },
-    select: { id: true, name: true },
-  });
-  if (!project) throw notFound("Project");
+  const projectDoc = await db.collection("projects").doc(input.projectId).get();
+  if (!projectDoc.exists) throw notFound("Project");
+  const project = { id: projectDoc.id, ...projectDoc.data() } as { id: string; name: string };
 
   const prompt = buildUserPrompt(input.description);
   const rawResponse = await callLlm(input.description);
@@ -120,10 +101,7 @@ export async function generatePlan(input: GeneratePlanInput) {
 
   const savedTasks = await persistPlan(input.projectId, tasks, prompt, rawResponse);
 
-  // Build DAG edges for the response
-  const edges = tasks.flatMap((t) =>
-    t.dependsOn.map((dep) => ({ from: dep, to: t.key })),
-  );
+  const edges = tasks.flatMap((t) => t.dependsOn.map((dep) => ({ from: dep, to: t.key })));
 
   return {
     project,

@@ -1,156 +1,109 @@
-import { LogLevel, AgentRunStatus } from "@prisma/client";
-import { prisma } from "../../lib/prisma";
+import { db } from "../../lib/firestore";
 
 const DEFAULT_LIMIT = 100;
 
-// ── Summary stats ─────────────────────────────────────────────────────────────
-
 export async function getSummaryStats() {
-  const [
-    totalTasks,
-    tasksByStatus,
-    totalAgentRuns,
-    agentRunsByStatus,
-    errorCount,
-    avgAgentDuration,
-    recentErrors,
-  ] = await Promise.all([
-    prisma.task.count(),
-    prisma.task.groupBy({ by: ["status"], _count: { id: true } }),
-    prisma.agentRun.count(),
-    prisma.agentRun.groupBy({ by: ["status"], _count: { id: true } }),
-    prisma.observabilityLog.count({ where: { level: LogLevel.ERROR } }),
-    prisma.agentRun.aggregate({
-      _avg: { durationMs: true },
-      where: { status: AgentRunStatus.COMPLETED, durationMs: { not: null } },
-    }),
-    prisma.observabilityLog.findMany({
-      where: { level: LogLevel.ERROR },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      select: { id: true, message: true, source: true, createdAt: true, agentType: true },
-    }),
+  const [tasksSnap, agentRunsSnap, errorLogsSnap] = await Promise.all([
+    db.collection("tasks").get(),
+    db.collection("agentRuns").get(),
+    db.collection("observabilityLogs").where("level", "==", "ERROR").orderBy("createdAt", "desc").limit(5).get(),
   ]);
 
+  const tasksByStatus: Record<string, number> = {};
+  tasksSnap.docs.forEach((d) => {
+    const s = d.data().status as string;
+    tasksByStatus[s] = (tasksByStatus[s] ?? 0) + 1;
+  });
+
+  const agentRunsByStatus: Record<string, number> = {};
+  let totalDuration = 0;
+  let completedCount = 0;
+  agentRunsSnap.docs.forEach((d) => {
+    const data = d.data();
+    const s = data.status as string;
+    agentRunsByStatus[s] = (agentRunsByStatus[s] ?? 0) + 1;
+    if (s === "COMPLETED" && data.durationMs) {
+      totalDuration += data.durationMs as number;
+      completedCount++;
+    }
+  });
+
+  const recentErrors = errorLogsSnap.docs.map((d) => {
+    const data = d.data();
+    return { id: d.id, message: data.message, source: data.source, createdAt: data.createdAt, agentType: data.agentType };
+  });
+
   return {
-    tasks: {
-      total: totalTasks,
-      byStatus: Object.fromEntries(tasksByStatus.map((r) => [r.status, r._count.id])),
-    },
+    tasks: { total: tasksSnap.size, byStatus: tasksByStatus },
     agentRuns: {
-      total: totalAgentRuns,
-      byStatus: Object.fromEntries(agentRunsByStatus.map((r) => [r.status, r._count.id])),
-      avgDurationMs: Math.round(avgAgentDuration._avg.durationMs ?? 0),
+      total: agentRunsSnap.size,
+      byStatus: agentRunsByStatus,
+      avgDurationMs: completedCount > 0 ? Math.round(totalDuration / completedCount) : 0,
     },
-    errors: { total: errorCount, recent: recentErrors },
+    errors: { total: errorLogsSnap.size, recent: recentErrors },
   };
 }
 
-// ── Logs feed ─────────────────────────────────────────────────────────────────
-
 export interface LogsQuery {
-  level?: LogLevel;
+  level?: string;
   source?: string;
   projectId?: string;
   taskId?: string;
-  search?: string;
   limit?: number;
-  cursor?: string; // createdAt ISO string for cursor pagination
+  cursor?: string;
 }
 
 export async function getLogs(query: LogsQuery = {}) {
-  const { level, source, projectId, taskId, search, limit = DEFAULT_LIMIT, cursor } = query;
+  const { level, source, projectId, taskId, limit = DEFAULT_LIMIT, cursor } = query;
 
-  const logs = await prisma.observabilityLog.findMany({
-    where: {
-      ...(level ? { level } : {}),
-      ...(source ? { source } : {}),
-      ...(projectId ? { projectId } : {}),
-      ...(taskId ? { taskId } : {}),
-      ...(search ? { message: { contains: search, mode: "insensitive" } } : {}),
-      ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    take: Math.min(limit, 500),
-  });
+  let q = db.collection("observabilityLogs").orderBy("createdAt", "desc") as FirebaseFirestore.Query;
+  if (level) q = q.where("level", "==", level);
+  if (source) q = q.where("source", "==", source);
+  if (projectId) q = q.where("projectId", "==", projectId);
+  if (taskId) q = q.where("taskId", "==", taskId);
+  if (cursor) q = q.where("createdAt", "<", cursor);
+
+  const snap = await q.limit(Math.min(limit, 500)).get();
+  const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
   return {
     logs,
-    nextCursor: logs.length === limit ? logs[logs.length - 1]!.createdAt.toISOString() : null,
+    nextCursor: logs.length === limit ? (logs[logs.length - 1] as Record<string, unknown>).createdAt as string : null,
   };
 }
 
-// ── Agent activity ────────────────────────────────────────────────────────────
-
 export async function getAgentActivity(limit = 50) {
-  const runs = await prisma.agentRun.findMany({
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    include: {
-      task: { select: { id: true, title: true, projectId: true } },
-    },
-  });
-
-  return runs.map((r) => ({
-    id: r.id,
-    agentType: r.agentType,
-    status: r.status,
-    durationMs: r.durationMs,
-    errorMsg: r.errorMsg,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    task: r.task,
-  }));
+  const snap = await db.collection("agentRuns").orderBy("createdAt", "desc").limit(limit).get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
-
-// ── Execution timeline ────────────────────────────────────────────────────────
-// Returns per-task execution data: start time, end time, agent stages
 
 export async function getExecutionTimeline(projectId?: string, limit = 20) {
-  const tasks = await prisma.task.findMany({
-    where: {
-      ...(projectId ? { projectId } : {}),
-      status: { in: ["COMPLETED", "FAILED", "IN_PROGRESS"] },
-    },
-    orderBy: { updatedAt: "desc" },
-    take: limit,
-    include: {
-      agentRuns: {
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          agentType: true,
-          status: true,
-          durationMs: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      },
-      project: { select: { id: true, name: true } },
-    },
-  });
+  let q = db.collection("tasks")
+    .where("status", "in", ["COMPLETED", "FAILED", "IN_PROGRESS"])
+    .orderBy("updatedAt", "desc") as FirebaseFirestore.Query;
+  if (projectId) q = q.where("projectId", "==", projectId);
 
-  return tasks.map((t) => {
-    const totalDurationMs = t.agentRuns.reduce((sum, r) => sum + (r.durationMs ?? 0), 0);
-    return {
-      taskId: t.id,
-      title: t.title,
-      status: t.status,
-      project: t.project,
-      createdAt: t.createdAt,
-      updatedAt: t.updatedAt,
-      totalDurationMs,
-      stages: t.agentRuns,
-    };
-  });
+  const snap = await q.limit(limit).get();
+
+  return Promise.all(
+    snap.docs.map(async (d) => {
+      const task = { id: d.id, ...d.data() } as Record<string, unknown>;
+      const runsSnap = await db.collection("agentRuns")
+        .where("taskId", "==", d.id)
+        .orderBy("createdAt", "asc")
+        .get();
+      const stages = runsSnap.docs.map((r) => ({ id: r.id, ...r.data() }));
+      const totalDurationMs = stages.reduce((sum, r) => sum + ((r as Record<string, unknown>).durationMs as number ?? 0), 0);
+      return { taskId: task.id, title: task.title, status: task.status, projectId: task.projectId, createdAt: task.createdAt, updatedAt: task.updatedAt, totalDurationMs, stages };
+    }),
+  );
 }
 
-// ── Error details ─────────────────────────────────────────────────────────────
-
 export async function getErrors(limit = 50) {
-  return prisma.observabilityLog.findMany({
-    where: { level: LogLevel.ERROR },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
+  const snap = await db.collection("observabilityLogs")
+    .where("level", "==", "ERROR")
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }

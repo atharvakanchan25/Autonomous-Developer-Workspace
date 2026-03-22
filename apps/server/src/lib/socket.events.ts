@@ -1,4 +1,7 @@
-import type { TaskStatus } from "@prisma/client";
+// Shared socket event payload types used by both the server emitter and Socket.io generics.
+// Keep these in sync with the web app's socket.events.ts.
+
+export type TaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
 
 export interface TaskUpdatedPayload {
   taskId: string;
@@ -56,8 +59,7 @@ export interface DeploymentUpdatedPayload {
   updatedAt: string;
 }
 
-// ── Typed maps for Socket.io generics ────────────────────────────────────────
-
+// Typed maps for Socket.io generics
 export interface ServerToClientEvents {
   "task:updated": (payload: TaskUpdatedPayload) => void;
   "agent:log": (payload: AgentLogPayload) => void;

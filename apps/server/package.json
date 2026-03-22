@@ -5,40 +5,30 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "dev:worker": "ts-node-dev --respawn --transpile-only src/queue/worker.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "start:worker": "node dist/queue/worker.js",
     "lint": "eslint src/",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate",
-    "db:studio": "prisma studio",
-    "db:push": "prisma db push"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@prisma/client": "^5.0.0",
-    "bullmq": "^5.0.0",
+    "@google/generative-ai": "^0.21.0",
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",
     "express": "^4.18.0",
     "express-rate-limit": "^8.3.1",
+    "firebase-admin": "^12.0.0",
     "helmet": "^8.1.0",
-    "ioredis": "^5.0.0",
-    "openai": "^4.0.0",
     "socket.io": "^4.7.0",
     "winston": "^3.11.0",
+    "winston-transport": "^4.7.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@adw/config": "*",
     "@types/cors": "^2.8.0",
-    "@types/express-rate-limit": "^6.0.0",
     "@types/express": "^4.17.0",
-    "@types/helmet": "^0.0.48",
     "@types/node": "^20.0.0",
-    "prisma": "^5.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.0.0"
   }

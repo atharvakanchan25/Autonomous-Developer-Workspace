@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createFileSchema = z.object({
-  projectId: z.string().cuid("Invalid project ID"),
+  projectId: z.string().min(1, "projectId is required"),
   path: z
     .string()
     .min(1)

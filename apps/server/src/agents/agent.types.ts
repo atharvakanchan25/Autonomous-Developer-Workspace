@@ -1,23 +1,40 @@
-import { AgentType } from "@prisma/client";
+// All agent-related types live here so nothing needs to import from @prisma/client.
 
-export { AgentType };
+export enum AgentType {
+  CODE_GENERATOR = "CODE_GENERATOR",
+  TEST_GENERATOR = "TEST_GENERATOR",
+  CODE_REVIEWER  = "CODE_REVIEWER",
+}
 
-// ── Input passed to every agent ───────────────────────────────────────────────
+export enum AgentRunStatus {
+  RUNNING   = "RUNNING",
+  COMPLETED = "COMPLETED",
+  FAILED    = "FAILED",
+}
+
+export enum TaskStatus {
+  PENDING     = "PENDING",
+  IN_PROGRESS = "IN_PROGRESS",
+  COMPLETED   = "COMPLETED",
+  FAILED      = "FAILED",
+}
+
+// what gets passed into every agent's run() method
 export interface AgentContext {
   taskId: string;
   projectId: string;
   taskTitle: string;
   taskDescription: string;
-  // Optional artefacts produced by upstream agents in the same pipeline
+  // outputs from agents that ran earlier in the same pipeline
   previousOutputs?: Partial<Record<AgentType, AgentResult>>;
 }
 
-// ── Output every agent must return ───────────────────────────────────────────
+// what every agent must return
 export interface AgentResult {
   agentType: AgentType;
-  summary: string;       // one-line human-readable summary
-  artifacts: Artifact[]; // zero or more produced artefacts
-  rawLlmOutput: string;  // full LLM response, stored for audit
+  summary: string;       // one-liner shown in the UI log feed
+  artifacts: Artifact[]; // files produced (code, tests, review)
+  rawLlmOutput: string;  // full LLM response stored for audit
   tokensUsed?: number;
 }
 
@@ -28,7 +45,7 @@ export interface Artifact {
   language?: string;
 }
 
-// ── Contract every agent must implement ──────────────────────────────────────
+// every agent class must implement this
 export interface IAgent {
   readonly type: AgentType;
   readonly displayName: string;
@@ -36,14 +53,14 @@ export interface IAgent {
   run(ctx: AgentContext): Promise<AgentResult>;
 }
 
-// ── Dispatcher request / response ────────────────────────────────────────────
+// what you pass to dispatchAgent()
 export interface DispatchRequest {
   taskId: string;
   agentType: AgentType;
-  // If true, run CODE_GENERATOR → TEST_GENERATOR → CODE_REVIEWER in sequence
   pipeline?: boolean;
 }
 
+// what dispatchAgent() returns
 export interface DispatchResult {
   agentRunId: string;
   taskId: string;

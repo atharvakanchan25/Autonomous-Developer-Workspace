@@ -1,23 +1,24 @@
-import { prisma } from "../../lib/prisma";
+import { db } from "../../lib/firestore";
 import { notFound } from "../../lib/errors";
 import { CreateProjectInput } from "./projects.schema";
 
 export async function getAllProjects() {
-  return prisma.project.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { tasks: true } } },
-  });
+  const snap = await db.collection("projects").orderBy("createdAt", "desc").get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function getProjectById(id: string) {
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: { tasks: true },
-  });
-  if (!project) throw notFound("Project");
-  return project;
+  const doc = await db.collection("projects").doc(id).get();
+  if (!doc.exists) throw notFound("Project");
+
+  const tasksSnap = await db.collection("tasks").where("projectId", "==", id).get();
+  const tasks = tasksSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  return { id: doc.id, ...doc.data(), tasks };
 }
 
 export async function createProject(data: CreateProjectInput) {
-  return prisma.project.create({ data });
+  const now = new Date().toISOString();
+  const ref = await db.collection("projects").add({ ...data, createdAt: now, updatedAt: now });
+  return { id: ref.id, ...data, createdAt: now, updatedAt: now };
 }

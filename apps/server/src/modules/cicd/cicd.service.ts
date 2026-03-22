@@ -1,10 +1,8 @@
-import { prisma } from "../../lib/prisma";
+import { db } from "../../lib/firestore";
 import { logger } from "../../lib/logger";
 import { notFound } from "../../lib/errors";
 import { emitter } from "../../lib/emitter";
 import type { CicdStageLog } from "../../lib/socket.events";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -26,11 +24,7 @@ function emitUpdate(
   log: CicdStageLog[],
   extra: { stage?: string; previewUrl?: string; errorMsg?: string } = {},
 ) {
-  emitter.deploymentUpdated({
-    deploymentId, projectId, taskId, status, log,
-    updatedAt: new Date().toISOString(),
-    ...extra,
-  });
+  emitter.deploymentUpdated({ deploymentId, projectId, taskId, status, log, updatedAt: new Date().toISOString(), ...extra });
 }
 
 interface StageConfig {
@@ -44,45 +38,21 @@ interface StageConfig {
 }
 
 const STAGES: StageConfig[] = [
-  {
-    name: "tests",
-    failRate: 0.1,
-    minMs: 1500,
-    maxMs: 2500,
-    passDetail: "All tests passed",
-    failDetail: "2 tests failed — assertion error in handler.test.ts",
-    dbField: "testDurationMs",
-  },
-  {
-    name: "build",
-    failRate: 0.05,
-    minMs: 2000,
-    maxMs: 3500,
-    passDetail: "Build succeeded — 0 errors, 0 warnings",
-    failDetail: "TypeScript error: Type 'string' is not assignable to type 'number'",
-    dbField: "buildDurationMs",
-  },
-  {
-    name: "deploy",
-    failRate: 0,
-    minMs: 800,
-    maxMs: 1400,
-    passDetail: "", // set dynamically
-    failDetail: "",
-  },
+  { name: "tests", failRate: 0.1, minMs: 1500, maxMs: 2500, passDetail: "All tests passed", failDetail: "2 tests failed — assertion error in handler.test.ts", dbField: "testDurationMs" },
+  { name: "build", failRate: 0.05, minMs: 2000, maxMs: 3500, passDetail: "Build succeeded — 0 errors, 0 warnings", failDetail: "TypeScript error: Type 'string' is not assignable to type 'number'", dbField: "buildDurationMs" },
+  { name: "deploy", failRate: 0, minMs: 800, maxMs: 1400, passDetail: "", failDetail: "" },
 ];
 
-// ── Pipeline ──────────────────────────────────────────────────────────────────
-
 export async function runCicdPipeline(projectId: string, taskId: string | null): Promise<void> {
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
-  if (!project) throw notFound("Project");
+  const projectDoc = await db.collection("projects").doc(projectId).get();
+  if (!projectDoc.exists) throw notFound("Project");
 
   const seed = `${projectId}${taskId ?? ""}`;
-  const deployment = await prisma.deployment.create({
-    data: { projectId, taskId, status: "RUNNING", log: "[]" },
+  const now = new Date().toISOString();
+  const deployRef = await db.collection("deployments").add({
+    projectId, taskId, status: "RUNNING", log: [], createdAt: now, updatedAt: now,
   });
-  const { id: deploymentId } = deployment;
+  const deploymentId = deployRef.id;
   const log: CicdStageLog[] = [];
 
   logger.info("CI/CD pipeline started", { deploymentId, projectId, taskId });
@@ -91,9 +61,8 @@ export async function runCicdPipeline(projectId: string, taskId: string | null):
     const stage = STAGES[i]!;
     const durationMs = stage.minMs + Math.floor(Math.random() * (stage.maxMs - stage.minMs));
 
-    // Mark stage as running
     log[i] = { stage: stage.name, status: "running" };
-    await prisma.deployment.update({ where: { id: deploymentId }, data: { log: JSON.stringify(log) } });
+    await deployRef.update({ log, updatedAt: new Date().toISOString() });
     emitUpdate(deploymentId, projectId, taskId, "RUNNING", log, { stage: stage.name });
 
     await sleep(durationMs);
@@ -103,31 +72,19 @@ export async function runCicdPipeline(projectId: string, taskId: string | null):
     if (stage.name === "deploy") {
       const previewUrl = generatePreviewUrl(deploymentId);
       log[i] = { stage: stage.name, status: "passed", durationMs, detail: `Preview deployed to ${previewUrl}` };
-      await prisma.deployment.update({
-        where: { id: deploymentId },
-        data: { status: "SUCCESS", previewUrl, log: JSON.stringify(log) },
-      });
+      await deployRef.update({ status: "SUCCESS", previewUrl, log, updatedAt: new Date().toISOString() });
       emitUpdate(deploymentId, projectId, taskId, "SUCCESS", log, { previewUrl });
       logger.info("CI/CD pipeline succeeded", { deploymentId, previewUrl });
       return;
     }
 
-    log[i] = {
-      stage: stage.name,
-      status: passed ? "passed" : "failed",
-      durationMs,
-      detail: passed ? stage.passDetail : stage.failDetail,
-    };
-
-    const dbUpdate: Record<string, unknown> = { log: JSON.stringify(log) };
-    if (stage.dbField) dbUpdate[stage.dbField] = durationMs;
-    await prisma.deployment.update({ where: { id: deploymentId }, data: dbUpdate });
+    log[i] = { stage: stage.name, status: passed ? "passed" : "failed", durationMs, detail: passed ? stage.passDetail : stage.failDetail };
+    const update: Record<string, unknown> = { log, updatedAt: new Date().toISOString() };
+    if (stage.dbField) update[stage.dbField] = durationMs;
+    await deployRef.update(update);
 
     if (!passed) {
-      await prisma.deployment.update({
-        where: { id: deploymentId },
-        data: { status: "FAILED", errorMsg: log[i]!.detail },
-      });
+      await deployRef.update({ status: "FAILED", errorMsg: log[i]!.detail, updatedAt: new Date().toISOString() });
       emitUpdate(deploymentId, projectId, taskId, "FAILED", log, { errorMsg: log[i]!.detail });
       logger.warn(`CI/CD failed at ${stage.name}`, { deploymentId });
       return;
@@ -137,22 +94,21 @@ export async function runCicdPipeline(projectId: string, taskId: string | null):
   }
 }
 
-// ── Queries ───────────────────────────────────────────────────────────────────
-
 export async function listDeployments(projectId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
-  if (!project) throw notFound("Project");
+  const projectDoc = await db.collection("projects").doc(projectId).get();
+  if (!projectDoc.exists) throw notFound("Project");
 
-  const rows = await prisma.deployment.findMany({
-    where: { projectId },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
-  return rows.map((d) => ({ ...d, log: JSON.parse(d.log) as CicdStageLog[] }));
+  const snap = await db.collection("deployments")
+    .where("projectId", "==", projectId)
+    .orderBy("createdAt", "desc")
+    .limit(50)
+    .get();
+
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function getDeployment(id: string) {
-  const d = await prisma.deployment.findUnique({ where: { id } });
-  if (!d) throw notFound("Deployment");
-  return { ...d, log: JSON.parse(d.log) as CicdStageLog[] };
+  const doc = await db.collection("deployments").doc(id).get();
+  if (!doc.exists) throw notFound("Deployment");
+  return { id: doc.id, ...doc.data() };
 }

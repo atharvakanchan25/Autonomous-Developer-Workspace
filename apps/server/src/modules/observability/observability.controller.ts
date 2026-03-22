@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import { LogLevel } from "@prisma/client";
 import * as obs from "./observability.service";
 import { asyncHandler } from "../../lib/asyncHandler";
 
@@ -8,13 +7,12 @@ export const getSummary = asyncHandler(async (_req, res: Response) => {
 });
 
 export const getLogs = asyncHandler(async (req: Request, res: Response) => {
-  const { level, source, projectId, taskId, search, limit, cursor } = req.query;
+  const { level, source, projectId, taskId, limit, cursor } = req.query;
   res.json(await obs.getLogs({
-    level: level as LogLevel | undefined,
+    level: level as string | undefined,
     source: source as string | undefined,
     projectId: projectId as string | undefined,
     taskId: taskId as string | undefined,
-    search: search as string | undefined,
     limit: limit ? Number(limit) : undefined,
     cursor: cursor as string | undefined,
   }));

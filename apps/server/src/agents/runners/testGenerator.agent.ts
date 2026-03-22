@@ -1,5 +1,4 @@
-import { AgentType } from "@prisma/client";
-import { IAgent, AgentContext, AgentResult } from "../agent.types";
+import { AgentType, IAgent, AgentContext, AgentResult } from "../agent.types";
 import { callLlm } from "../agent.llm";
 
 export class TestGeneratorAgent implements IAgent {
@@ -8,7 +7,7 @@ export class TestGeneratorAgent implements IAgent {
   readonly description = "Generates a Vitest test suite for a task, using generated code if available.";
 
   async run(ctx: AgentContext): Promise<AgentResult> {
-    // Use code from CODE_GENERATOR if it ran upstream in a pipeline
+    // if CODE_GENERATOR ran before us in the pipeline, use its output as context
     const codeArtifact = ctx.previousOutputs?.CODE_GENERATOR?.artifacts.find(
       (a) => a.type === "code",
     );
@@ -39,23 +38,17 @@ Rules:
       ],
     });
 
-    const filename = ctx.taskTitle
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 50) + ".test.ts";
+    const filename =
+      ctx.taskTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 50) + ".test.ts";
 
     return {
       agentType: this.type,
       summary: `Generated Vitest test suite for "${ctx.taskTitle}"`,
-      artifacts: [
-        {
-          type: "test",
-          filename,
-          content,
-          language: "typescript",
-        },
-      ],
+      artifacts: [{ type: "test", filename, content, language: "typescript" }],
       rawLlmOutput: content,
       tokensUsed,
     };
