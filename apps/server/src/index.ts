@@ -5,6 +5,7 @@ import { prisma } from "./lib/prisma";
 import { errorHandler } from "./lib/errorHandler";
 import projectsRouter from "./modules/projects/projects.router";
 import tasksRouter from "./modules/tasks/tasks.router";
+import aiRouter from "./modules/ai/ai.router";
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
@@ -15,6 +16,7 @@ app.use(express.json());
 // Routes
 app.use("/api/projects", projectsRouter);
 app.use("/api/tasks", tasksRouter);
+app.use("/api/ai", aiRouter);
 
 app.get("/health", async (_req, res) => {
   try {

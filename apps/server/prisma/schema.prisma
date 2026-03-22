@@ -8,27 +8,45 @@ datasource db {
 }
 
 model Project {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   name        String
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   tasks       Task[]
+  aiPlanLogs  AiPlanLog[]
 
   @@map("projects")
 }
 
 model Task {
-  id          String     @id @default(cuid())
-  title       String
-  description String?
-  status      TaskStatus @default(PENDING)
-  projectId   String
-  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id           String     @id @default(cuid())
+  title        String
+  description  String?
+  status       TaskStatus @default(PENDING)
+  order        Int        @default(0)
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Self-relation for DAG dependencies
+  dependsOn    Task[]     @relation("TaskDependencies")
+  dependents   Task[]     @relation("TaskDependencies")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@map("tasks")
+}
+
+// Audit log — stores raw LLM input/output for every plan generation
+model AiPlanLog {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  prompt      String
+  rawResponse String
+  taskCount   Int
+  createdAt   DateTime @default(now())
+
+  @@map("ai_plan_logs")
 }
 
 enum TaskStatus {
