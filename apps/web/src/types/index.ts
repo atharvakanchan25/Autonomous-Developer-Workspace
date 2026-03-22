@@ -113,7 +113,7 @@ export interface TimelineRow {
   stages: TimelineStage[];
 }
 
-// ── File editor ──────────────────────────────────────────────────────────────
+// ── File editor ───────────────────────────────────────────────────────────────
 
 export interface ProjectFile {
   id: string;
@@ -161,6 +161,31 @@ export interface UpdateFilePayload {
 export interface RenameFilePayload {
   path: string;
   name: string;
+}
+
+// ── CI/CD ─────────────────────────────────────────────────────────────────────
+
+export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
+
+export interface CicdStageLog {
+  stage: string;
+  status: "running" | "passed" | "failed" | "skipped";
+  durationMs?: number;
+  detail?: string;
+}
+
+export interface Deployment {
+  id: string;
+  projectId: string;
+  taskId?: string | null;
+  status: DeploymentStatus;
+  testDurationMs?: number | null;
+  buildDurationMs?: number | null;
+  previewUrl?: string | null;
+  errorMsg?: string | null;
+  log: CicdStageLog[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SummaryStats {

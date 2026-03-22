@@ -8,14 +8,15 @@ datasource db {
 }
 
 model Project {
-  id          String      @id @default(cuid())
+  id          String        @id @default(cuid())
   name        String
   description String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   tasks       Task[]
   aiPlanLogs  AiPlanLog[]
   files       ProjectFile[]
+  deployments Deployment[]
 
   @@map("projects")
 }
@@ -28,7 +29,6 @@ model Task {
   order        Int        @default(0)
   projectId    String
   project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  // Self-relation for DAG dependencies
   dependsOn    Task[]     @relation("TaskDependencies")
   dependents   Task[]     @relation("TaskDependencies")
   agentRuns    AgentRun[]
@@ -38,7 +38,6 @@ model Task {
   @@map("tasks")
 }
 
-// Audit log — stores raw LLM input/output for every plan generation
 model AiPlanLog {
   id          String   @id @default(cuid())
   projectId   String
@@ -51,16 +50,16 @@ model AiPlanLog {
   @@map("ai_plan_logs")
 }
 
-// ── File storage ─────────────────────────────────────────────────────────────
+// ── File storage ──────────────────────────────────────────────────────────────
 model ProjectFile {
   id        String        @id @default(cuid())
   projectId String
   project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  path      String        // e.g. "src/index.ts"
-  name      String        // filename only, e.g. "index.ts"
+  path      String
+  name      String
   language  String        @default("plaintext")
   content   String        @default("")
-  size      Int           @default(0) // bytes
+  size      Int           @default(0)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   versions  FileVersion[]
@@ -70,33 +69,58 @@ model ProjectFile {
   @@map("project_files")
 }
 
-// Lightweight version history — stores full content snapshots
 model FileVersion {
   id        String      @id @default(cuid())
   fileId    String
   file      ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
   content   String
   size      Int
-  label     String?     // optional human label, e.g. "before refactor"
+  label     String?
   createdAt DateTime    @default(now())
 
   @@index([fileId, createdAt])
   @@map("file_versions")
 }
 
+// ── CI/CD ─────────────────────────────────────────────────────────────────────
+model Deployment {
+  id              String           @id @default(cuid())
+  projectId       String
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId          String?
+  status          DeploymentStatus @default(PENDING)
+  testDurationMs  Int?
+  buildDurationMs Int?
+  previewUrl      String?
+  errorMsg        String?
+  log             String           @default("[]")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([projectId, createdAt])
+  @@map("deployments")
+}
+
+enum DeploymentStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
 // Persists every agent execution — input, output, status, duration
 model AgentRun {
-  id          String        @id @default(cuid())
+  id          String         @id @default(cuid())
   taskId      String
-  task        Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task        Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
   agentType   AgentType
   status      AgentRunStatus @default(RUNNING)
-  input       String        // JSON-serialised AgentContext
-  output      String?       // JSON-serialised AgentResult
+  input       String
+  output      String?
   errorMsg    String?
   durationMs  Int?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@map("agent_runs")
 }
@@ -120,18 +144,17 @@ enum TaskStatus {
   FAILED
 }
 
-// Structured observability log — written by every significant server event
 model ObservabilityLog {
   id         String   @id @default(cuid())
   level      LogLevel
-  source     String   // e.g. "agent", "queue", "task", "pipeline"
+  source     String
   message    String
   taskId     String?
   projectId  String?
   agentRunId String?
   agentType  String?
   durationMs Int?
-  meta       String?  // JSON blob for arbitrary extra fields
+  meta       String?
   createdAt  DateTime @default(now())
 
   @@index([projectId, createdAt])

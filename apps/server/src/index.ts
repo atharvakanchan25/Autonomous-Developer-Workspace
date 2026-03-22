@@ -13,10 +13,10 @@ import aiRouter from "./modules/ai/ai.router";
 import agentsRouter from "./agents/agent.router";
 import observabilityRouter from "./modules/observability/observability.router";
 import filesRouter from "./modules/files/files.router";
+import cicdRouter from "./modules/cicd/cicd.router";
 import { bootstrapAgents } from "./agents/agent.service";
 import { taskQueue, taskQueueEvents } from "./queue/queue";
 
-// Worker registers itself and starts listening
 import "./queue/worker";
 
 const app = express();
@@ -32,6 +32,7 @@ app.use("/api/ai", aiRouter);
 app.use("/api/agents", agentsRouter);
 app.use("/api/observe", observabilityRouter);
 app.use("/api/files", filesRouter);
+app.use("/api/cicd", cicdRouter);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get("/health", async (_req, res) => {
