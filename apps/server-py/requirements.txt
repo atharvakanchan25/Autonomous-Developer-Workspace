@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-socketio
+python-dotenv
+pydantic>=2.9.0
+pydantic-settings>=2.4.0
+firebase-admin
+groq
+slowapi
+python-multipart

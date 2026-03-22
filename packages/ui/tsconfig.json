@@ -1,7 +1,0 @@
-{
-  "extends": "@adw/config/tsconfig/nextjs.json",
-  "compilerOptions": {
-    "noEmit": true
-  },
-  "include": ["src"]
-}
