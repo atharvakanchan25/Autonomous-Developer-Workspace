@@ -3,6 +3,7 @@ node_modules
 dist
 .next
 *.log
+logs/
 .env
 .env.local
 .env.*.local

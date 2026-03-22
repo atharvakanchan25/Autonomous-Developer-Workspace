@@ -5,8 +5,10 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev:worker": "ts-node-dev --respawn --transpile-only src/queue/worker.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:worker": "node dist/queue/worker.js",
     "lint": "eslint src/",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
@@ -17,10 +19,13 @@
   },
   "dependencies": {
     "@prisma/client": "^5.0.0",
+    "bullmq": "^5.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",
     "express": "^4.18.0",
+    "ioredis": "^5.0.0",
     "openai": "^4.0.0",
+    "winston": "^3.11.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
