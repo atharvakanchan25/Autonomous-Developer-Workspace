@@ -136,26 +136,61 @@ NEXT_PUBLIC_API_URL="http://localhost:4000"
 
 ### 5. Run the project
 
-Open **two terminals**:
+You need **two terminals open at the same time** — one for the backend, one for the frontend.
 
-**Terminal 1 — Backend (port 4000):**
+---
+
+#### 🖥️ Terminal 1 — Python Backend (port 4000)
+
 ```bash
-cd apps/server-py
-
 # Windows
+cd apps/server-py
 .venv\Scripts\python.exe run.py
 
 # macOS / Linux
+cd apps/server-py
 .venv/bin/python run.py
 ```
 
-**Terminal 2 — Frontend (port 3000):**
+You should see:
+```
+INFO:     Started server process
+INFO:     Uvicorn running on http://0.0.0.0:4000
+INFO:     Server starting — env=development port=4000
+```
+
+---
+
+#### 🌐 Terminal 2 — Next.js Frontend (port 3000)
+
 ```bash
 cd apps/web
 npm run dev
 ```
 
-Open **http://localhost:3000** in your browser.
+You should see:
+```
+▲ Next.js 14
+- Local: http://localhost:3000
+✓ Ready
+```
+
+---
+
+Once both are running, open **http://localhost:3000** in your browser.
+
+> **Both terminals must stay open** while using the app. Closing either one will stop that part of the stack.
+
+---
+
+#### Quick reference
+
+| What | Command | URL |
+|---|---|---|
+| Backend | `.venv\Scripts\python.exe run.py` | http://localhost:4000 |
+| Frontend | `npm run dev` | http://localhost:3000 |
+| API Docs | — | http://localhost:4000/docs |
+| Health check | — | http://localhost:4000/health |
 
 ---
 
