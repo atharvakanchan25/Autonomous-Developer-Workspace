@@ -133,6 +133,12 @@ export default function ProjectsPage() {
                     {p._count?.tasks ?? 0} task{p._count?.tasks !== 1 ? "s" : ""}
                   </span>
                   <Link
+                    href={`/graph?projectId=${p.id}`}
+                    className="rounded border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100"
+                  >
+                    View graph ⬡
+                  </Link>
+                  <Link
                     href={`/tasks?projectId=${p.id}`}
                     className="rounded border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100"
                   >

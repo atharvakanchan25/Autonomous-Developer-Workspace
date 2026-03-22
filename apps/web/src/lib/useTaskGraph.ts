@@ -1,0 +1,135 @@
+"use client";
+
+import { useEffect, useRef, useCallback, useState } from "react";
+import dagre from "dagre";
+import { type Node, type Edge, MarkerType } from "@xyflow/react";
+import { api } from "./api";
+import type { Task, TaskStatus } from "@/types";
+
+// ── Layout constants ─────────────────────────────────────────────────────────
+const NODE_W = 220;
+const NODE_H = 80;
+const POLL_MS = 5_000;
+
+// ── Dagre auto-layout ────────────────────────────────────────────────────────
+function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 80 });
+
+  nodes.forEach((n) => g.setNode(n.id, { width: NODE_W, height: NODE_H }));
+  edges.forEach((e) => g.setEdge(e.source, e.target));
+
+  dagre.layout(g);
+
+  return nodes.map((n) => {
+    const { x, y } = g.node(n.id);
+    return { ...n, position: { x: x - NODE_W / 2, y: y - NODE_H / 2 } };
+  });
+}
+
+// ── Tasks → RF nodes + edges ─────────────────────────────────────────────────
+function tasksToGraph(tasks: Task[]): { nodes: Node[]; edges: Edge[] } {
+  const rawNodes: Node[] = tasks.map((t) => ({
+    id: t.id,
+    type: "taskNode",
+    position: { x: 0, y: 0 }, // dagre will overwrite
+    data: { task: t },
+  }));
+
+  const edges: Edge[] = tasks.flatMap((t) =>
+    (t.dependsOn ?? []).map((dep) => ({
+      id: `${dep.id}->${t.id}`,
+      source: dep.id,
+      target: t.id,
+      animated: t.status === "IN_PROGRESS",
+      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "#94a3b8" },
+      style: { stroke: "#94a3b8", strokeWidth: 1.5 },
+    })),
+  );
+
+  const nodes = applyDagreLayout(rawNodes, edges);
+  return { nodes, edges };
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+export interface UseTaskGraphResult {
+  nodes: Node[];
+  edges: Edge[];
+  tasks: Task[];
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+  refresh: () => void;
+  updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<void>;
+}
+
+export function useTaskGraph(projectId: string | null): UseTaskGraphResult {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchTasks = useCallback(async (pid: string, silent = false) => {
+    if (!silent) setLoading(true);
+    setError(null);
+    try {
+      const data = await api.tasks.listWithDeps(pid);
+      setTasks(data);
+      const { nodes: n, edges: e } = tasksToGraph(data);
+      setNodes(n);
+      setEdges(e);
+      setLastUpdated(new Date());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load tasks");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  // Initial load + polling
+  useEffect(() => {
+    if (!projectId) {
+      setTasks([]);
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
+
+    fetchTasks(projectId);
+
+    timerRef.current = setInterval(() => fetchTasks(projectId, true), POLL_MS);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [projectId, fetchTasks]);
+
+  // Optimistic status update — updates local state immediately, then syncs
+  const updateTaskStatus = useCallback(
+    async (taskId: string, status: TaskStatus) => {
+      setTasks((prev) => {
+        const updated = prev.map((t) => (t.id === taskId ? { ...t, status } : t));
+        const { nodes: n, edges: e } = tasksToGraph(updated);
+        setNodes(n);
+        setEdges(e);
+        return updated;
+      });
+      await api.tasks.updateStatus(taskId, status);
+    },
+    [],
+  );
+
+  return {
+    nodes,
+    edges,
+    tasks,
+    loading,
+    error,
+    lastUpdated,
+    refresh: () => projectId && fetchTasks(projectId),
+    updateTaskStatus,
+  };
+}

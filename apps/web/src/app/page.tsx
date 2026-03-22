@@ -94,7 +94,7 @@ export default function HomePage() {
             {projects.slice(0, 5).map((p) => (
               <li key={p.id}>
                 <Link
-                  href={`/tasks?projectId=${p.id}`}
+                  href={`/graph?projectId=${p.id}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
                 >
                   <div>

@@ -1,4 +1,11 @@
-import type { Project, Task, CreateProjectPayload, CreateTaskPayload } from "@/types";
+import type {
+  Project,
+  Task,
+  CreateProjectPayload,
+  CreateTaskPayload,
+  AiPlanResult,
+  GeneratePlanPayload,
+} from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -16,7 +23,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// Projects
 export const api = {
   projects: {
     list: () => request<Project[]>("/api/projects"),
@@ -27,6 +33,9 @@ export const api = {
   tasks: {
     list: (projectId?: string) =>
       request<Task[]>(`/api/tasks${projectId ? `?projectId=${projectId}` : ""}`),
+    // Fetches tasks with their dependsOn relations included
+    listWithDeps: (projectId: string) =>
+      request<Task[]>(`/api/tasks?projectId=${projectId}`),
     get: (id: string) => request<Task>(`/api/tasks/${id}`),
     create: (data: CreateTaskPayload) =>
       request<Task>("/api/tasks", { method: "POST", body: JSON.stringify(data) }),
@@ -35,5 +44,9 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ status }),
       }),
+  },
+  ai: {
+    generatePlan: (data: GeneratePlanPayload) =>
+      request<AiPlanResult>("/api/ai/plan", { method: "POST", body: JSON.stringify(data) }),
   },
 };
