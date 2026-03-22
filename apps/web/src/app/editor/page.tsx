@@ -1,32 +1,26 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useFileTree } from "@/lib/useFileTree";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { EditorPane } from "@/components/editor/EditorPane";
 import { RenameModal } from "@/components/editor/RenameModal";
-import type { Project, ProjectFile } from "@/types";
+import { ProjectSelect } from "@/components/ProjectSelect";
+import type { ProjectFile } from "@/types";
 
 export default function EditorPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const projectIdParam = searchParams.get("projectId") ?? "";
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState(projectIdParam);
+  const [selectedProjectId, setSelectedProjectId] = useState(searchParams.get("projectId") ?? "");
   const [activeFile, setActiveFile] = useState<ProjectFile | null>(null);
   const [renameTarget, setRenameTarget] = useState<ProjectFile | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { tree, loading, refresh, addFile, updateFile, removeFile } =
     useFileTree(selectedProjectId || null);
-
-  // Load projects for the selector
-  useEffect(() => {
-    api.projects.list().then(setProjects).catch(() => null);
-  }, []);
 
   function handleProjectChange(id: string) {
     setSelectedProjectId(id);
@@ -36,7 +30,6 @@ export default function EditorPage() {
     router.replace(`/editor?${p.toString()}`);
   }
 
-  // Create a new file
   const handleNewFile = useCallback(async (path: string, name: string) => {
     if (!selectedProjectId) return;
     try {
@@ -48,7 +41,6 @@ export default function EditorPage() {
     }
   }, [selectedProjectId, addFile]);
 
-  // Delete a file
   const handleDelete = useCallback(async (file: ProjectFile) => {
     if (!confirm(`Delete "${file.path}"?`)) return;
     setDeleteError(null);
@@ -61,7 +53,6 @@ export default function EditorPage() {
     }
   }, [activeFile, removeFile]);
 
-  // Rename a file
   const handleRenameConfirm = useCallback(async (path: string, name: string) => {
     if (!renameTarget) return;
     try {
@@ -75,13 +66,11 @@ export default function EditorPage() {
     }
   }, [renameTarget, activeFile, updateFile]);
 
-  // When a file is saved, sync the tree metadata
   const handleSaved = useCallback((file: ProjectFile) => {
     updateFile(file);
     setActiveFile(file);
   }, [updateFile]);
 
-  // When a file is selected, fetch full content if not already loaded
   const handleSelect = useCallback(async (file: ProjectFile) => {
     if (file.content !== undefined && file.content !== null) {
       setActiveFile(file);
@@ -100,16 +89,11 @@ export default function EditorPage() {
     <div className="flex h-[calc(100vh-57px)] flex-col bg-gray-900">
       {/* ── Top bar ── */}
       <div className="flex items-center gap-3 border-b border-gray-700/60 bg-gray-900 px-4 py-2">
-        <select
+        <ProjectSelect
           value={selectedProjectId}
-          onChange={(e) => handleProjectChange(e.target.value)}
-          className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:border-blue-500 focus:outline-none"
-        >
-          <option value="">Select a project…</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+          onChange={handleProjectChange}
+          className="border-gray-700 bg-gray-800 text-gray-300 focus:border-blue-500"
+        />
 
         {selectedProjectId && (
           <button
@@ -127,7 +111,6 @@ export default function EditorPage() {
 
       {/* ── Main layout: sidebar + editor ── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* File explorer sidebar */}
         <div className="w-56 shrink-0 border-r border-gray-700/60">
           {selectedProjectId ? (
             <FileExplorer
@@ -148,13 +131,11 @@ export default function EditorPage() {
           )}
         </div>
 
-        {/* Monaco editor pane */}
         <div className="flex-1 overflow-hidden">
           <EditorPane file={activeFile} onSaved={handleSaved} />
         </div>
       </div>
 
-      {/* Rename modal */}
       {renameTarget && (
         <RenameModal
           file={renameTarget}

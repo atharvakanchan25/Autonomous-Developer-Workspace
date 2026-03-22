@@ -1,9 +1,4 @@
 import OpenAI from "openai";
+import { config } from "./config";
 
-if (!process.env.OPENAI_API_KEY) {
-  throw new Error("OPENAI_API_KEY is not set in environment variables");
-}
-
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });

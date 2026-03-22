@@ -5,22 +5,28 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
 import { DeploymentCard } from "@/components/cicd/DeploymentCard";
-import type { Project, Deployment } from "@/types";
+import { ProjectSelect } from "@/components/ProjectSelect";
+import type { Deployment } from "@/types";
 import type { DeploymentUpdatedPayload } from "@/lib/socket.events";
+
+const SOCKET_DOT: Record<string, string> = {
+  connected: "bg-green-500 animate-pulse",
+  connecting: "bg-yellow-500",
+  disconnected: "bg-gray-400",
+};
+const SOCKET_LABEL: Record<string, string> = {
+  connected: "Live", connecting: "Connecting…", disconnected: "Polling",
+};
 
 export default function DeployPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const projectIdParam = searchParams.get("projectId") ?? "";
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedId, setSelectedId] = useState(projectIdParam);
+  const [selectedId, setSelectedId] = useState(searchParams.get("projectId") ?? "");
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => { api.projects.list().then(setProjects).catch(() => null); }, []);
 
   const loadDeployments = useCallback(async (pid: string) => {
     if (!pid) { setDeployments([]); return; }
@@ -80,13 +86,6 @@ export default function DeployPage() {
   const successCount = deployments.filter((d) => d.status === "SUCCESS").length;
   const failedCount  = deployments.filter((d) => d.status === "FAILED").length;
 
-  const SOCKET_DOT: Record<string, string> = {
-    connected: "bg-green-500 animate-pulse", connecting: "bg-yellow-500", disconnected: "bg-gray-400",
-  };
-  const SOCKET_LABEL: Record<string, string> = {
-    connected: "Live", connecting: "Connecting…", disconnected: "Polling",
-  };
-
   return (
     <main className="mx-auto max-w-4xl px-6 py-8">
       {/* Header */}
@@ -100,14 +99,7 @@ export default function DeployPage() {
             <span className={`h-2 w-2 rounded-full ${SOCKET_DOT[socketStatus]}`} />
             {SOCKET_LABEL[socketStatus]}
           </span>
-          <select
-            value={selectedId}
-            onChange={(e) => handleProjectChange(e.target.value)}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 focus:border-gray-500 focus:outline-none"
-          >
-            <option value="">Select a project…</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <ProjectSelect value={selectedId} onChange={handleProjectChange} />
           <button
             onClick={handleTrigger}
             disabled={!selectedId || triggering}
@@ -139,7 +131,6 @@ export default function DeployPage() {
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      {/* List */}
       {!selectedId ? (
         <div className="rounded-lg border border-dashed border-gray-300 py-16 text-center">
           <p className="text-sm text-gray-400">Select a project to view deployments</p>

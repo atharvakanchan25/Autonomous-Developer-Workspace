@@ -1,6 +1,7 @@
 import winston from "winston";
 import path from "path";
 import { PrismaTransport } from "./prismaTransport";
+import { config } from "./config";
 
 const { combine, timestamp, errors, json, colorize, printf } = winston.format;
 
@@ -10,7 +11,7 @@ const consoleFormat = printf(({ level, message, timestamp: ts, ...meta }) => {
 });
 
 export const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL ?? "info",
+  level: config.LOG_LEVEL,
   format: combine(timestamp({ format: "YYYY-MM-DD HH:mm:ss" }), errors({ stack: true }), json()),
   defaultMeta: { service: "adw-server" },
   transports: [
@@ -34,7 +35,6 @@ export const logger = winston.createLogger({
       maxFiles: 5,
       tailable: true,
     }),
-    // Persist structured logs to PostgreSQL for the observability dashboard
     new PrismaTransport({ level: "info" }),
   ],
 });

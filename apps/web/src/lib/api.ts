@@ -1,3 +1,4 @@
+import { webConfig } from "./config";
 import type {
   Project,
   Task,
@@ -18,7 +19,7 @@ import type {
   Deployment,
 } from "@/types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const BASE = webConfig.apiUrl;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {

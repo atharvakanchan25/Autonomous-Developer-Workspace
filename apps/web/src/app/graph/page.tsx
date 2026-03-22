@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { api } from "@/lib/api";
 import { useTaskGraph } from "@/lib/useTaskGraph";
-import type { Project, TaskStatus } from "@/types";
+import type { TaskStatus } from "@/types";
 import { STATUS_STYLES } from "@/components/graph/TaskNode";
 import { Spinner, ErrorMessage } from "@/components/Feedback";
 import { AgentLogFeed } from "@/components/AgentLogFeed";
+import { ProjectSelect } from "@/components/ProjectSelect";
 
 const TaskGraph = dynamic(
   () => import("@/components/graph/TaskGraph").then((m) => m.TaskGraph),
@@ -31,20 +31,14 @@ const SOCKET_STATUS_STYLES = {
 export default function GraphPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const projectIdParam = searchParams.get("projectId") ?? "";
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedId, setSelectedId] = useState<string>(projectIdParam);
+  const [selectedId, setSelectedId] = useState<string>(searchParams.get("projectId") ?? "");
   const [showLogs, setShowLogs] = useState(true);
 
   const {
     nodes, edges, tasks, loading, error,
     lastUpdated, socketStatus, refresh, updateTaskStatus,
   } = useTaskGraph(selectedId || null);
-
-  useEffect(() => {
-    api.projects.list().then(setProjects).catch(() => null);
-  }, []);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -62,16 +56,7 @@ export default function GraphPage() {
       {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-5 py-3">
         <div className="flex flex-wrap items-center gap-4">
-          <select
-            value={selectedId}
-            onChange={(e) => handleSelect(e.target.value)}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 focus:border-gray-500 focus:outline-none"
-          >
-            <option value="">Select a project…</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <ProjectSelect value={selectedId} onChange={handleSelect} />
 
           {tasks.length > 0 && (
             <div className="flex items-center gap-3">
@@ -88,7 +73,6 @@ export default function GraphPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Legend */}
           <div className="flex items-center gap-3">
             {LEGEND.map(({ status, label }) => (
               <span key={status} className="flex items-center gap-1.5 text-xs text-gray-600">
@@ -98,7 +82,6 @@ export default function GraphPage() {
             ))}
           </div>
 
-          {/* Socket status */}
           {selectedId && (
             <span className="flex items-center gap-1.5 text-xs text-gray-500">
               <span className="relative flex h-2 w-2">
@@ -138,7 +121,6 @@ export default function GraphPage() {
 
       {/* ── Main area: graph + log feed ── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Graph canvas */}
         <div className="relative flex-1 bg-slate-50">
           {error && (
             <div className="absolute left-1/2 top-4 z-10 w-80 -translate-x-1/2">
@@ -161,7 +143,6 @@ export default function GraphPage() {
           )}
         </div>
 
-        {/* Agent log feed panel */}
         {showLogs && (
           <div className="w-80 shrink-0 border-l border-gray-200">
             <AgentLogFeed projectId={selectedId || null} />

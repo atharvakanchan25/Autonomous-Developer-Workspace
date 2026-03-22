@@ -1,13 +1,9 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express";
 import { generatePlanSchema } from "./ai.schema";
 import * as aiService from "./ai.service";
+import { asyncHandler } from "../../lib/asyncHandler";
 
-export async function generatePlan(req: Request, res: Response, next: NextFunction) {
-  try {
-    const input = generatePlanSchema.parse(req.body);
-    const result = await aiService.generatePlan(input);
-    res.status(201).json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const generatePlan = asyncHandler(async (req: Request, res: Response) => {
+  const input = generatePlanSchema.parse(req.body);
+  res.status(201).json(await aiService.generatePlan(input));
+});

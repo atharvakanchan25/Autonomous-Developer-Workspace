@@ -1,38 +1,20 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express";
 import * as agentService from "./agent.service";
+import { asyncHandler } from "../lib/asyncHandler";
 
-export async function runAgent(req: Request, res: Response, next: NextFunction) {
-  try {
-    const input = agentService.runAgentSchema.parse(req.body);
-    const result = await agentService.runAgent(input);
-    res.status(202).json(result);
-  } catch (err) {
-    next(err);
-  }
-}
+export const runAgent = asyncHandler(async (req: Request, res: Response) => {
+  const input = agentService.runAgentSchema.parse(req.body);
+  res.status(202).json(await agentService.runAgent(input));
+});
 
-export async function getAgentRun(req: Request, res: Response, next: NextFunction) {
-  try {
-    const run = await agentService.getAgentRun(req.params.id);
-    res.json(run);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getAgentRun = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await agentService.getAgentRun(req.params.id!));
+});
 
-export async function listAgentRuns(req: Request, res: Response, next: NextFunction) {
-  try {
-    const runs = await agentService.listAgentRunsForTask(req.params.taskId);
-    res.json(runs);
-  } catch (err) {
-    next(err);
-  }
-}
+export const listAgentRuns = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await agentService.listAgentRunsForTask(req.params.taskId!));
+});
 
-export async function listAgents(_req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(agentService.getRegisteredAgents());
-  } catch (err) {
-    next(err);
-  }
-}
+export const listAgents = asyncHandler(async (_req, res: Response) => {
+  res.json(agentService.getRegisteredAgents());
+});

@@ -1,7 +1,13 @@
 import "dotenv/config";
+// Config must be imported first — validates env and throws on misconfiguration
+import { config } from "./lib/config";
+
 import http from "http";
-import express from "express";
+import crypto from "crypto";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { prisma } from "./lib/prisma";
 import { logger } from "./lib/logger";
 import { checkRedisHealth, redisClient } from "./lib/redis";
@@ -20,12 +26,31 @@ import { taskQueue, taskQueueEvents } from "./queue/queue";
 import "./queue/worker";
 
 const app = express();
-const PORT = Number(process.env.PORT ?? 4000);
 
-app.use(cors({ origin: process.env.CORS_ORIGIN ?? "http://localhost:3000" }));
-app.use(express.json());
+// ── Security middleware ───────────────────────────────────────────────────────
+app.use(helmet());
+app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
 
-// ── Routes ───────────────────────────────────────────────────────────────────
+// ── Request ID ───────────────────────────────────────────────────────────────
+app.use((req: Request & { id?: string }, _res: Response, next: NextFunction) => {
+  req.id = crypto.randomUUID();
+  next();
+});
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+const limiter = rateLimit({
+  windowMs: config.RATE_LIMIT_WINDOW_MS,
+  max: config.RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+});
+app.use("/api", limiter);
+
+// ── Body parsing ──────────────────────────────────────────────────────────────
+app.use(express.json({ limit: "10mb" }));
+
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api/projects", projectsRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/ai", aiRouter);
@@ -34,7 +59,7 @@ app.use("/api/observe", observabilityRouter);
 app.use("/api/files", filesRouter);
 app.use("/api/cicd", cicdRouter);
 
-// ── Health ───────────────────────────────────────────────────────────────────
+// ── Health ────────────────────────────────────────────────────────────────────
 app.get("/health", async (_req, res) => {
   const [dbOk, redisOk] = await Promise.all([
     prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
@@ -51,13 +76,18 @@ app.get("/health", async (_req, res) => {
   });
 });
 
+// ── 404 handler ───────────────────────────────────────────────────────────────
+app.use((_req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
 app.use(errorHandler);
 
-// ── HTTP + Socket.io server ───────────────────────────────────────────────────
+// ── HTTP + Socket.io ──────────────────────────────────────────────────────────
 const httpServer = http.createServer(app);
 initSocketServer(httpServer);
 
-// ── Graceful shutdown ────────────────────────────────────────────────────────
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
 async function shutdown(signal: string) {
   logger.info(`Received ${signal} — shutting down`);
   await Promise.all([
@@ -74,16 +104,24 @@ async function shutdown(signal: string) {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught exception", { error: err.message, stack: err.stack });
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled rejection", { reason: String(reason) });
+});
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 async function bootstrap() {
   bootstrapAgents();
   await prisma.$connect();
   logger.info("Database connected");
 
-  httpServer.listen(PORT, () => {
-    logger.info(`Server running on http://localhost:${PORT}`);
-    logger.info(`Socket.io listening on ws://localhost:${PORT}`);
+  httpServer.listen(config.PORT, () => {
+    logger.info(`Server running on http://localhost:${config.PORT}`);
+    logger.info(`Socket.io listening on ws://localhost:${config.PORT}`);
+    logger.info(`Environment: ${config.NODE_ENV}`);
   });
 }
 

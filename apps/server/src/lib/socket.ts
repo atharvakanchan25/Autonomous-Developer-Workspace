@@ -1,6 +1,7 @@
 import { Server as HttpServer } from "http";
 import { Server as SocketServer } from "socket.io";
 import { logger } from "./logger";
+import { config } from "./config";
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -22,7 +23,7 @@ export function initSocketServer(httpServer: HttpServer): TypedIO {
     httpServer,
     {
       cors: {
-        origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+        origin: config.CORS_ORIGIN,
         methods: ["GET", "POST"],
       },
       // Scalability: swap transports to ["websocket"] + Redis adapter for multi-instance

@@ -1,31 +1,17 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express";
 import * as projectsService from "./projects.service";
 import { createProjectSchema } from "./projects.schema";
+import { asyncHandler } from "../../lib/asyncHandler";
 
-export async function getProjects(_req: Request, res: Response, next: NextFunction) {
-  try {
-    const projects = await projectsService.getAllProjects();
-    res.json(projects);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getProjects = asyncHandler(async (_req, res) => {
+  res.json(await projectsService.getAllProjects());
+});
 
-export async function getProject(req: Request, res: Response, next: NextFunction) {
-  try {
-    const project = await projectsService.getProjectById(req.params.id);
-    res.json(project);
-  } catch (err) {
-    next(err);
-  }
-}
+export const getProject = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await projectsService.getProjectById(req.params.id!));
+});
 
-export async function createProject(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createProjectSchema.parse(req.body);
-    const project = await projectsService.createProject(data);
-    res.status(201).json(project);
-  } catch (err) {
-    next(err);
-  }
-}
+export const createProject = asyncHandler(async (req: Request, res: Response) => {
+  const data = createProjectSchema.parse(req.body);
+  res.status(201).json(await projectsService.createProject(data));
+});

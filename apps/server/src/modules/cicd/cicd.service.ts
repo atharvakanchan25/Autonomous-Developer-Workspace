@@ -4,11 +4,11 @@ import { notFound } from "../../lib/errors";
 import { emitter } from "../../lib/emitter";
 import type { CicdStageLog } from "../../lib/socket.events";
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function shouldPass(seed: string, failRate = 0.1): boolean {
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+function deterministicPass(seed: string, failRate: number): boolean {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   return (hash % 100) >= failRate * 100;
@@ -18,7 +18,7 @@ function generatePreviewUrl(deploymentId: string): string {
   return `https://preview-${deploymentId.slice(-8)}.adw-deploy.example.com`;
 }
 
-function emit(
+function emitUpdate(
   deploymentId: string,
   projectId: string,
   taskId: string | null,
@@ -33,6 +33,47 @@ function emit(
   });
 }
 
+interface StageConfig {
+  name: string;
+  failRate: number;
+  minMs: number;
+  maxMs: number;
+  passDetail: string;
+  failDetail: string;
+  dbField?: "testDurationMs" | "buildDurationMs";
+}
+
+const STAGES: StageConfig[] = [
+  {
+    name: "tests",
+    failRate: 0.1,
+    minMs: 1500,
+    maxMs: 2500,
+    passDetail: "All tests passed",
+    failDetail: "2 tests failed — assertion error in handler.test.ts",
+    dbField: "testDurationMs",
+  },
+  {
+    name: "build",
+    failRate: 0.05,
+    minMs: 2000,
+    maxMs: 3500,
+    passDetail: "Build succeeded — 0 errors, 0 warnings",
+    failDetail: "TypeScript error: Type 'string' is not assignable to type 'number'",
+    dbField: "buildDurationMs",
+  },
+  {
+    name: "deploy",
+    failRate: 0,
+    minMs: 800,
+    maxMs: 1400,
+    passDetail: "", // set dynamically
+    failDetail: "",
+  },
+];
+
+// ── Pipeline ──────────────────────────────────────────────────────────────────
+
 export async function runCicdPipeline(projectId: string, taskId: string | null): Promise<void> {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) throw notFound("Project");
@@ -46,72 +87,67 @@ export async function runCicdPipeline(projectId: string, taskId: string | null):
 
   logger.info("CI/CD pipeline started", { deploymentId, projectId, taskId });
 
-  // ── Stage 1: Tests ────────────────────────────────────────────────────────
-  log.push({ stage: "tests", status: "running" });
-  await prisma.deployment.update({ where: { id: deploymentId }, data: { log: JSON.stringify(log) } });
-  emit(deploymentId, projectId, taskId, "RUNNING", log, { stage: "tests" });
+  for (let i = 0; i < STAGES.length; i++) {
+    const stage = STAGES[i]!;
+    const durationMs = stage.minMs + Math.floor(Math.random() * (stage.maxMs - stage.minMs));
 
-  const testPass = shouldPass(seed + "test", 0.1);
-  const testMs = 1500 + Math.floor(Math.random() * 1000);
-  await sleep(testMs);
+    // Mark stage as running
+    log[i] = { stage: stage.name, status: "running" };
+    await prisma.deployment.update({ where: { id: deploymentId }, data: { log: JSON.stringify(log) } });
+    emitUpdate(deploymentId, projectId, taskId, "RUNNING", log, { stage: stage.name });
 
-  log[0] = {
-    stage: "tests", status: testPass ? "passed" : "failed", durationMs: testMs,
-    detail: testPass ? "All tests passed" : "2 tests failed — assertion error in handler.test.ts",
-  };
-  await prisma.deployment.update({ where: { id: deploymentId }, data: { testDurationMs: testMs, log: JSON.stringify(log) } });
-  emit(deploymentId, projectId, taskId, "RUNNING", log, { stage: "tests" });
+    await sleep(durationMs);
 
-  if (!testPass) {
-    await prisma.deployment.update({ where: { id: deploymentId }, data: { status: "FAILED", errorMsg: log[0]!.detail } });
-    emit(deploymentId, projectId, taskId, "FAILED", log, { errorMsg: log[0]!.detail });
-    logger.warn("CI/CD failed at tests", { deploymentId });
-    return;
+    const passed = deterministicPass(seed + stage.name, stage.failRate);
+
+    if (stage.name === "deploy") {
+      const previewUrl = generatePreviewUrl(deploymentId);
+      log[i] = { stage: stage.name, status: "passed", durationMs, detail: `Preview deployed to ${previewUrl}` };
+      await prisma.deployment.update({
+        where: { id: deploymentId },
+        data: { status: "SUCCESS", previewUrl, log: JSON.stringify(log) },
+      });
+      emitUpdate(deploymentId, projectId, taskId, "SUCCESS", log, { previewUrl });
+      logger.info("CI/CD pipeline succeeded", { deploymentId, previewUrl });
+      return;
+    }
+
+    log[i] = {
+      stage: stage.name,
+      status: passed ? "passed" : "failed",
+      durationMs,
+      detail: passed ? stage.passDetail : stage.failDetail,
+    };
+
+    const dbUpdate: Record<string, unknown> = { log: JSON.stringify(log) };
+    if (stage.dbField) dbUpdate[stage.dbField] = durationMs;
+    await prisma.deployment.update({ where: { id: deploymentId }, data: dbUpdate });
+
+    if (!passed) {
+      await prisma.deployment.update({
+        where: { id: deploymentId },
+        data: { status: "FAILED", errorMsg: log[i]!.detail },
+      });
+      emitUpdate(deploymentId, projectId, taskId, "FAILED", log, { errorMsg: log[i]!.detail });
+      logger.warn(`CI/CD failed at ${stage.name}`, { deploymentId });
+      return;
+    }
+
+    emitUpdate(deploymentId, projectId, taskId, "RUNNING", log, { stage: stage.name });
   }
-
-  // ── Stage 2: Build ────────────────────────────────────────────────────────
-  log.push({ stage: "build", status: "running" });
-  await prisma.deployment.update({ where: { id: deploymentId }, data: { log: JSON.stringify(log) } });
-  emit(deploymentId, projectId, taskId, "RUNNING", log, { stage: "build" });
-
-  const buildPass = shouldPass(seed + "build", 0.05);
-  const buildMs = 2000 + Math.floor(Math.random() * 1500);
-  await sleep(buildMs);
-
-  log[1] = {
-    stage: "build", status: buildPass ? "passed" : "failed", durationMs: buildMs,
-    detail: buildPass ? "Build succeeded — 0 errors, 0 warnings" : "TypeScript error: Type 'string' is not assignable to type 'number'",
-  };
-  await prisma.deployment.update({ where: { id: deploymentId }, data: { buildDurationMs: buildMs, log: JSON.stringify(log) } });
-  emit(deploymentId, projectId, taskId, "RUNNING", log, { stage: "build" });
-
-  if (!buildPass) {
-    await prisma.deployment.update({ where: { id: deploymentId }, data: { status: "FAILED", errorMsg: log[1]!.detail } });
-    emit(deploymentId, projectId, taskId, "FAILED", log, { errorMsg: log[1]!.detail });
-    logger.warn("CI/CD failed at build", { deploymentId });
-    return;
-  }
-
-  // ── Stage 3: Deploy ───────────────────────────────────────────────────────
-  log.push({ stage: "deploy", status: "running" });
-  await prisma.deployment.update({ where: { id: deploymentId }, data: { log: JSON.stringify(log) } });
-  emit(deploymentId, projectId, taskId, "RUNNING", log, { stage: "deploy" });
-
-  const deployMs = 800 + Math.floor(Math.random() * 600);
-  await sleep(deployMs);
-  const previewUrl = generatePreviewUrl(deploymentId);
-
-  log[2] = { stage: "deploy", status: "passed", durationMs: deployMs, detail: `Preview deployed to ${previewUrl}` };
-  await prisma.deployment.update({ where: { id: deploymentId }, data: { status: "SUCCESS", previewUrl, log: JSON.stringify(log) } });
-  emit(deploymentId, projectId, taskId, "SUCCESS", log, { previewUrl });
-
-  logger.info("CI/CD pipeline succeeded", { deploymentId, previewUrl });
 }
+
+// ── Queries ───────────────────────────────────────────────────────────────────
 
 export async function listDeployments(projectId: string) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) throw notFound("Project");
-  const rows = await prisma.deployment.findMany({ where: { projectId }, orderBy: { createdAt: "desc" }, take: 50 });
+
+  const rows = await prisma.deployment.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
   return rows.map((d) => ({ ...d, log: JSON.parse(d.log) as CicdStageLog[] }));
 }
 

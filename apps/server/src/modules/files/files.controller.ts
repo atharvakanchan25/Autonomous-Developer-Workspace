@@ -1,66 +1,44 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express";
 import * as filesService from "./files.service";
 import { createFileSchema, updateFileSchema, renameFileSchema } from "./files.schema";
+import { asyncHandler } from "../../lib/asyncHandler";
+import { badRequest } from "../../lib/errors";
 
-export async function listFiles(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { projectId } = req.query;
-    if (typeof projectId !== "string") {
-      res.status(400).json({ error: "projectId query param is required" });
-      return;
-    }
-    res.json(await filesService.listFiles(projectId));
-  } catch (err) { next(err); }
-}
+export const listFiles = asyncHandler(async (req: Request, res: Response) => {
+  const { projectId } = req.query;
+  if (typeof projectId !== "string" || !projectId) throw badRequest("projectId query param is required");
+  res.json(await filesService.listFiles(projectId));
+});
 
-export async function getFile(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await filesService.getFile(req.params.id));
-  } catch (err) { next(err); }
-}
+export const getFile = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await filesService.getFile(req.params.id!));
+});
 
-export async function createFile(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = createFileSchema.parse(req.body);
-    res.status(201).json(await filesService.createFile(data));
-  } catch (err) { next(err); }
-}
+export const createFile = asyncHandler(async (req: Request, res: Response) => {
+  res.status(201).json(await filesService.createFile(createFileSchema.parse(req.body)));
+});
 
-export async function updateFile(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = updateFileSchema.parse(req.body);
-    res.json(await filesService.updateFile(req.params.id, data));
-  } catch (err) { next(err); }
-}
+export const updateFile = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await filesService.updateFile(req.params.id!, updateFileSchema.parse(req.body)));
+});
 
-export async function renameFile(req: Request, res: Response, next: NextFunction) {
-  try {
-    const data = renameFileSchema.parse(req.body);
-    res.json(await filesService.renameFile(req.params.id, data));
-  } catch (err) { next(err); }
-}
+export const renameFile = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await filesService.renameFile(req.params.id!, renameFileSchema.parse(req.body)));
+});
 
-export async function deleteFile(req: Request, res: Response, next: NextFunction) {
-  try {
-    await filesService.deleteFile(req.params.id);
-    res.status(204).send();
-  } catch (err) { next(err); }
-}
+export const deleteFile = asyncHandler(async (req: Request, res: Response) => {
+  await filesService.deleteFile(req.params.id!);
+  res.status(204).send();
+});
 
-export async function listVersions(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await filesService.listVersions(req.params.id));
-  } catch (err) { next(err); }
-}
+export const listVersions = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await filesService.listVersions(req.params.id!));
+});
 
-export async function getVersion(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await filesService.getVersion(req.params.versionId));
-  } catch (err) { next(err); }
-}
+export const getVersion = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await filesService.getVersion(req.params.versionId!));
+});
 
-export async function restoreVersion(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await filesService.restoreVersion(req.params.id, req.params.versionId));
-  } catch (err) { next(err); }
-}
+export const restoreVersion = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await filesService.restoreVersion(req.params.id!, req.params.versionId!));
+});

@@ -188,11 +188,10 @@ export function EditorPane({ file, onSaved }: EditorPaneProps) {
     }
   }, [activeId, activeFile, onSaved]);
 
-  // Ctrl/Cmd+S to save
-  const handleEditorMount: OnMount = useCallback((editor) => {
+  // Ctrl/Cmd+S to save — use the monaco instance passed to onMount, not window.monaco
+  const handleEditorMount: OnMount = useCallback((editor, monaco) => {
     editor.addCommand(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).monaco?.KeyMod?.CtrlCmd | (window as any).monaco?.KeyCode?.KeyS ?? 2097,
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
       () => handleSave(false),
     );
   }, [handleSave]);
