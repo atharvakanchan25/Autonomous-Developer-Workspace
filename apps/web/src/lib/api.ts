@@ -15,6 +15,7 @@ import type {
   CreateFilePayload,
   UpdateFilePayload,
   RenameFilePayload,
+  Deployment,
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -43,7 +44,6 @@ export const api = {
   tasks: {
     list: (projectId?: string) =>
       request<Task[]>(`/api/tasks${projectId ? `?projectId=${projectId}` : ""}`),
-    // Fetches tasks with their dependsOn relations included
     listWithDeps: (projectId: string) =>
       request<Task[]>(`/api/tasks?projectId=${projectId}`),
     get: (id: string) => request<Task>(`/api/tasks/${id}`),
@@ -90,5 +90,15 @@ export const api = {
       request<FileVersion>(`/api/files/${id}/versions/${versionId}`),
     restoreVersion: (id: string, versionId: string) =>
       request<ProjectFile>(`/api/files/${id}/versions/${versionId}/restore`, { method: "POST" }),
+  },
+  cicd: {
+    trigger: (projectId: string, taskId?: string) =>
+      request<{ message: string }>("/api/cicd/deploy", {
+        method: "POST",
+        body: JSON.stringify({ projectId, taskId }),
+      }),
+    list: (projectId: string) =>
+      request<Deployment[]>(`/api/cicd/deployments?projectId=${projectId}`),
+    get: (id: string) => request<Deployment>(`/api/cicd/deployments/${id}`),
   },
 };
