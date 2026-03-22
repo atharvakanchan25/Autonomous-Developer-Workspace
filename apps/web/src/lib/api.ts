@@ -5,6 +5,10 @@ import type {
   CreateTaskPayload,
   AiPlanResult,
   GeneratePlanPayload,
+  SummaryStats,
+  ObsLog,
+  AgentRunRow,
+  TimelineRow,
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -48,5 +52,18 @@ export const api = {
   ai: {
     generatePlan: (data: GeneratePlanPayload) =>
       request<AiPlanResult>("/api/ai/plan", { method: "POST", body: JSON.stringify(data) }),
+  },
+  observe: {
+    summary: () => request<SummaryStats>("/api/observe/summary"),
+    logs: (params?: Record<string, string>) => {
+      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      return request<{ logs: ObsLog[]; nextCursor: string | null }>(`/api/observe/logs${qs}`);
+    },
+    agents: (limit?: number) =>
+      request<AgentRunRow[]>(`/api/observe/agents${limit ? `?limit=${limit}` : ""}`),
+    timeline: (projectId?: string) =>
+      request<TimelineRow[]>(`/api/observe/timeline${projectId ? `?projectId=${projectId}` : ""}`),
+    errors: (limit?: number) =>
+      request<ObsLog[]>(`/api/observe/errors${limit ? `?limit=${limit}` : ""}`),
   },
 };

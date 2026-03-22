@@ -85,3 +85,30 @@ enum TaskStatus {
   COMPLETED
   FAILED
 }
+
+// Structured observability log — written by every significant server event
+model ObservabilityLog {
+  id         String   @id @default(cuid())
+  level      LogLevel
+  source     String   // e.g. "agent", "queue", "task", "pipeline"
+  message    String
+  taskId     String?
+  projectId  String?
+  agentRunId String?
+  agentType  String?
+  durationMs Int?
+  meta       String?  // JSON blob for arbitrary extra fields
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([level, createdAt])
+  @@index([source, createdAt])
+  @@map("observability_logs")
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}

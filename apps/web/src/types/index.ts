@@ -61,3 +61,70 @@ export interface GeneratePlanPayload {
   projectId: string;
   description: string;
 }
+
+// ── Observability ─────────────────────────────────────────────────────────────
+
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+export type AgentRunStatus = "RUNNING" | "COMPLETED" | "FAILED";
+export type AgentType = "CODE_GENERATOR" | "TEST_GENERATOR" | "CODE_REVIEWER";
+
+export interface ObsLog {
+  id: string;
+  level: LogLevel;
+  source: string;
+  message: string;
+  taskId?: string | null;
+  projectId?: string | null;
+  agentRunId?: string | null;
+  agentType?: string | null;
+  durationMs?: number | null;
+  meta?: string | null;
+  createdAt: string;
+}
+
+export interface AgentRunRow {
+  id: string;
+  agentType: AgentType;
+  status: AgentRunStatus;
+  durationMs?: number | null;
+  errorMsg?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  task: { id: string; title: string; projectId: string };
+}
+
+export interface TimelineStage {
+  id: string;
+  agentType: AgentType;
+  status: AgentRunStatus;
+  durationMs?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimelineRow {
+  taskId: string;
+  title: string;
+  status: TaskStatus;
+  project: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+  totalDurationMs: number;
+  stages: TimelineStage[];
+}
+
+export interface SummaryStats {
+  tasks: {
+    total: number;
+    byStatus: Partial<Record<TaskStatus, number>>;
+  };
+  agentRuns: {
+    total: number;
+    byStatus: Partial<Record<AgentRunStatus, number>>;
+    avgDurationMs: number;
+  };
+  errors: {
+    total: number;
+    recent: Array<{ id: string; message: string; source: string; createdAt: string; agentType?: string | null }>;
+  };
+}
