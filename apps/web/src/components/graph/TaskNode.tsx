@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { Task, TaskStatus } from "@/types";
 
@@ -44,15 +44,19 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 
 const ALL_STATUSES: TaskStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED"];
 
-// ── Node component ───────────────────────────────────────────────────────────
+// ── Node component ────────────────────────────────────────────────────────────
 interface TaskNodeData {
   task: Task;
   onStatusChange?: (id: string, status: TaskStatus) => void;
 }
 
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
 function TaskNodeInner({ data }: NodeProps) {
   const { task, onStatusChange } = data as unknown as TaskNodeData;
   const s = STATUS_STYLES[task.status];
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -62,11 +66,35 @@ function TaskNodeInner({ data }: NodeProps) {
     [task.id, onStatusChange],
   );
 
+  const handleRunPipeline = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setRunning(true);
+      setRunError(null);
+      try {
+        const res = await fetch(`${BASE}/api/agents/run`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId: task.id, pipeline: true }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.detail ?? body.error ?? `Failed: ${res.status}`);
+        }
+      } catch (err) {
+        setRunError(err instanceof Error ? err.message : "Failed to run pipeline");
+      } finally {
+        setRunning(false);
+      }
+    },
+    [task.id],
+  );
+
   return (
     <div
       className={`w-[220px] rounded-lg border-2 ${s.border} ${s.bg} shadow-sm transition-shadow hover:shadow-md`}
     >
-      {/* Target handle — left */}
+      {/* Target handle – left */}
       <Handle
         type="target"
         position={Position.Left}
@@ -110,9 +138,23 @@ function TaskNodeInner({ data }: NodeProps) {
             ))}
           </select>
         </div>
+
+        {/* Run Pipeline button */}
+        <button
+          onClick={handleRunPipeline}
+          disabled={running || task.status === "IN_PROGRESS"}
+          className="mt-2 w-full rounded bg-gray-900 px-2 py-1 text-[10px] font-medium text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
+        >
+          {running ? "Running…" : "▶ Run Pipeline"}
+        </button>
+
+        {/* Error message */}
+        {runError && (
+          <p className="mt-1 text-[10px] text-red-500 line-clamp-2">{runError}</p>
+        )}
       </div>
 
-      {/* Source handle — right */}
+      {/* Source handle – right */}
       <Handle
         type="source"
         position={Position.Right}
