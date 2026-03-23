@@ -8,21 +8,39 @@ import { useSocket } from "./useSocket";
 import type { Task, TaskStatus } from "@/types";
 import type { TaskUpdatedPayload } from "./socket.events";
 
-const NODE_W = 220;
-const NODE_H = 80;
+const NODE_W = 320;
+const NODE_H = 140;
 const FALLBACK_POLL_MS = 15_000; // only used when socket is disconnected
 
 function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 80 });
-  nodes.forEach((n) => g.setNode(n.id, { width: NODE_W, height: NODE_H }));
-  edges.forEach((e) => g.setEdge(e.source, e.target));
-  dagre.layout(g);
-  return nodes.map((n) => {
-    const { x, y } = g.node(n.id);
-    return { ...n, position: { x: x - NODE_W / 2, y: y - NODE_H / 2 } };
+  // Sort nodes by order number
+  const sortedNodes = [...nodes].sort((a, b) => {
+    const orderA = (a.data as { task: Task }).task.order;
+    const orderB = (b.data as { task: Task }).task.order;
+    return orderA - orderB;
   });
+  
+  // Arrange in two columns with even spacing
+  const arranged: Node[] = [];
+  const columnWidth = 500;  // Distance between columns
+  const rowHeight = 180;    // Distance between rows
+  const startX = 150;       // Left margin
+  const startY = 100;       // Top margin
+  
+  sortedNodes.forEach((node, index) => {
+    const column = index % 2;  // Alternate between 0 and 1
+    const row = Math.floor(index / 2);
+    
+    arranged.push({
+      ...node,
+      position: {
+        x: startX + (column * columnWidth),
+        y: startY + (row * rowHeight)
+      }
+    });
+  });
+  
+  return arranged;
 }
 
 function tasksToGraph(tasks: Task[]): { nodes: Node[]; edges: Edge[] } {

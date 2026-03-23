@@ -191,6 +191,13 @@ export default function ProjectsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-gray-500">{timeAgo(p.updatedAt)}</span>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => api.files.download(p.id)}
+                      className="rounded-md border border-gray-700 px-2.5 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800/50"
+                      title="Download project"
+                    >
+                      ⬇
+                    </button>
                     <Link
                       href={`/tasks?projectId=${p.id}`}
                       className="rounded-md border border-gray-700 px-2.5 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800/50"

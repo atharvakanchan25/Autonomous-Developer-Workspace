@@ -7,9 +7,19 @@ router = APIRouter()
 
 
 @router.get("/summary")
-def get_summary_stats():
-    tasks_snap = list(db.collection("tasks").stream())
-    agent_runs_snap = list(db.collection("agentRuns").stream())
+def get_summary_stats(projectId: Optional[str] = Query(None)):
+    tasks_query = db.collection("tasks")
+    if projectId:
+        tasks_query = tasks_query.where("projectId", "==", projectId)
+    tasks_snap = list(tasks_query.stream())
+    
+    agent_runs_query = db.collection("agentRuns")
+    agent_runs_snap = list(agent_runs_query.stream())
+    
+    # Filter agent runs by project if specified
+    if projectId:
+        task_ids = [d.id for d in tasks_snap]
+        agent_runs_snap = [d for d in agent_runs_snap if d.to_dict().get("taskId") in task_ids]
 
     tasks_by_status: dict[str, int] = {}
     for d in tasks_snap:
@@ -27,13 +37,15 @@ def get_summary_stats():
             total_duration += data["durationMs"]
             completed_count += 1
 
-    error_snap = list(
+    error_query = (
         db.collection("observabilityLogs")
         .where("level", "==", "ERROR")
         .order_by("createdAt", direction="DESCENDING")
         .limit(5)
-        .stream()
     )
+    if projectId:
+        error_query = error_query.where("projectId", "==", projectId)
+    error_snap = list(error_query.stream())
 
     return {
         "tasks": {"total": len(tasks_snap), "byStatus": tasks_by_status},
@@ -77,13 +89,14 @@ def get_logs(
 
 
 @router.get("/agents")
-def get_agent_activity(limit: int = Query(50, le=200)):
-    snap = (
+def get_agent_activity(projectId: Optional[str] = Query(None), limit: int = Query(50, le=200)):
+    query = (
         db.collection("agentRuns")
         .order_by("createdAt", direction="DESCENDING")
         .limit(limit)
-        .stream()
     )
+    
+    snap = query.stream()
     
     results = []
     for d in snap:
@@ -94,14 +107,21 @@ def get_agent_activity(limit: int = Query(50, le=200)):
             task_doc = db.collection("tasks").document(task_id).get()
             if task_doc.exists:
                 task_data = task_doc.to_dict()
+                # Filter by project if specified
+                if projectId and task_data.get("projectId") != projectId:
+                    continue
                 agent_run["task"] = {
                     "id": task_doc.id,
                     "title": task_data.get("title", "Unknown Task"),
                     "status": task_data.get("status", "UNKNOWN")
                 }
             else:
+                if projectId:  # Skip if filtering by project
+                    continue
                 agent_run["task"] = {"id": task_id, "title": "Unknown Task", "status": "UNKNOWN"}
         else:
+            if projectId:  # Skip if filtering by project
+                continue
             agent_run["task"] = {"id": "", "title": "Unknown Task", "status": "UNKNOWN"}
         results.append(agent_run)
     
@@ -150,12 +170,15 @@ def get_execution_timeline(
 
 
 @router.get("/errors")
-def get_errors(limit: int = Query(50, le=200)):
-    snap = (
+def get_errors(projectId: Optional[str] = Query(None), limit: int = Query(50, le=200)):
+    query = (
         db.collection("observabilityLogs")
         .where("level", "==", "ERROR")
         .order_by("createdAt", direction="DESCENDING")
         .limit(limit)
-        .stream()
     )
+    if projectId:
+        query = query.where("projectId", "==", projectId)
+    
+    snap = query.stream()
     return [{"id": d.id, **d.to_dict()} for d in snap]

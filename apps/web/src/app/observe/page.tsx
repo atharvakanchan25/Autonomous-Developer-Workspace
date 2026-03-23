@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
+import { ProjectSelect } from "@/components/ProjectSelect";
 import type { SummaryStats, ObsLog, AgentRunRow, TimelineRow } from "@/types";
 import { StatCard } from "@/components/observe/StatCard";
 import { LogTable } from "@/components/observe/LogTable";
@@ -26,6 +27,7 @@ const AUTO_REFRESH_MS = 10_000;
 
 export default function ObservePage() {
   const [tab, setTab] = useState<Tab>("logs");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [stats, setStats]       = useState<SummaryStats | null>(null);
   const [logs, setLogs]         = useState<ObsLog[]>([]);
   const [agents, setAgents]     = useState<AgentRunRow[]>([]);
@@ -38,18 +40,19 @@ export default function ObservePage() {
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
+      const projectFilter = selectedProjectId || undefined;
       const [s, l, a, t, e] = await Promise.all([
-        api.observe.summary(),
-        api.observe.logs({ limit: "200" }),
-        api.observe.agents(100),
-        api.observe.timeline(),
-        api.observe.errors(50),
+        api.observe.summary(projectFilter),
+        api.observe.logs({ limit: "200", ...(projectFilter && { projectId: projectFilter }) }),
+        api.observe.agents(100, projectFilter),
+        api.observe.timeline(projectFilter),
+        api.observe.errors(50, projectFilter),
       ]);
       setStats(s); setLogs(l.logs); setAgents(a); setTimeline(t); setErrors(e);
       setLastRefresh(new Date());
     } catch { /* silent */ }
     finally { if (!silent) setLoading(false); }
-  }, []);
+  }, [selectedProjectId]);
 
   useEffect(() => {
     fetchAll();
@@ -59,7 +62,7 @@ export default function ObservePage() {
 
   const handleSocketEvent = useCallback(() => fetchAll(true), [fetchAll]);
   const { status: socketStatus } = useSocket({
-    projectId: null,
+    projectId: selectedProjectId || null,
     onTaskUpdated: handleSocketEvent,
     onAgentLog: handleSocketEvent,
     onPipelineStage: handleSocketEvent,
@@ -80,6 +83,12 @@ export default function ObservePage() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700 bg-[#1a1f2e] px-8">
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-medium text-gray-100">Observability</h1>
+          <ProjectSelect
+            value={selectedProjectId}
+            onChange={setSelectedProjectId}
+            placeholder="All Projects (Total)"
+            className="border-gray-700 bg-[#252d3d] text-gray-300 text-xs"
+          />
           <span className="flex items-center gap-1.5 text-xs text-gray-500">
             <motion.span
               className={`h-1.5 w-1.5 rounded-full ${
