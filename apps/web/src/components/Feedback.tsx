@@ -1,15 +1,15 @@
 export function Spinner() {
   return (
-    <div className="flex justify-center py-12">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" />
+    <div className="flex items-center justify-center py-12">
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
     </div>
   );
 }
 
 export function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 py-12 text-center">
-      <p className="text-sm text-gray-500">{message}</p>
+    <div className="rounded-xl border border-dashed border-gray-200 py-14 text-center">
+      <p className="text-sm text-gray-400">{message}</p>
     </div>
   );
 }

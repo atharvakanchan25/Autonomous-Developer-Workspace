@@ -62,6 +62,10 @@ export const api = {
     generatePlan: (data: GeneratePlanPayload) =>
       request<AiPlanResult>("/api/ai/generate-plan", { method: "POST", body: JSON.stringify(data) }),
   },
+  agents: {
+    run: (data: { taskId: string; pipeline: boolean; agentType?: string }) =>
+      request<any>("/api/agents/run", { method: "POST", body: JSON.stringify(data) }),
+  },
   observe: {
     summary: () => request<SummaryStats>("/api/observe/summary"),
     logs: (params?: Record<string, string>) => {

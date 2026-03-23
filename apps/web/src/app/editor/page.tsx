@@ -86,32 +86,34 @@ export default function EditorPage() {
   }, [updateFile]);
 
   return (
-    <div className="flex h-[calc(100vh-57px)] flex-col bg-gray-900">
-      {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 border-b border-gray-700/60 bg-gray-900 px-4 py-2">
+    <div className="flex h-full flex-col bg-[#1E1E1E]">
+      {/* Top bar */}
+      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-white/10 bg-[#2D2D2D] px-4">
         <ProjectSelect
           value={selectedProjectId}
           onChange={handleProjectChange}
-          className="border-gray-700 bg-gray-800 text-gray-300 focus:border-blue-500"
+          className="border-white/10 bg-[#3C3C3C] text-gray-300 text-xs focus:border-indigo-500"
         />
-
         {selectedProjectId && (
           <button
             onClick={refresh}
-            className="rounded border border-gray-700 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-700/60 hover:text-gray-300"
+            className="rounded border border-white/10 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
           >
-            ↺ Refresh
+            ↺
           </button>
         )}
-
-        {deleteError && (
-          <span className="text-xs text-red-400">{deleteError}</span>
+        {activeFile && (
+          <span className="ml-2 text-xs text-gray-500">
+            {activeFile.path}
+          </span>
         )}
+        {deleteError && <span className="text-xs text-red-400">{deleteError}</span>}
       </div>
 
-      {/* ── Main layout: sidebar + editor ── */}
+      {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-56 shrink-0 border-r border-gray-700/60">
+        {/* File explorer */}
+        <div className="w-52 shrink-0 border-r border-white/10 bg-[#252526]">
           {selectedProjectId ? (
             <FileExplorer
               tree={tree}
@@ -123,14 +125,15 @@ export default function EditorPage() {
               loading={loading}
             />
           ) : (
-            <div className="flex h-full items-center justify-center">
-              <p className="px-4 text-center text-[12px] text-gray-600">
+            <div className="flex h-full items-center justify-center px-4">
+              <p className="text-center text-[11px] text-gray-600">
                 Select a project to browse files
               </p>
             </div>
           )}
         </div>
 
+        {/* Editor */}
         <div className="flex-1 overflow-hidden">
           <EditorPane file={activeFile} onSaved={handleSaved} />
         </div>

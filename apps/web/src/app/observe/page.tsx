@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
 import type { SummaryStats, ObsLog, AgentRunRow, TimelineRow } from "@/types";
@@ -9,11 +10,13 @@ import { LogTable } from "@/components/observe/LogTable";
 import { AgentActivityTable } from "@/components/observe/AgentActivityTable";
 import { ExecutionTimeline } from "@/components/observe/ExecutionTimeline";
 import { ErrorFeed } from "@/components/observe/ErrorFeed";
+import { PageShell } from "@/components/PageShell";
+import { duration, ease, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
 
 type Tab = "logs" | "agents" | "timeline" | "errors";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "logs",     label: "Execution Logs" },
+  { id: "logs",     label: "Logs" },
   { id: "agents",   label: "Agent Activity" },
   { id: "timeline", label: "Timeline" },
   { id: "errors",   label: "Errors" },
@@ -42,13 +45,9 @@ export default function ObservePage() {
         api.observe.timeline(),
         api.observe.errors(50),
       ]);
-      setStats(s);
-      setLogs(l.logs);
-      setAgents(a);
-      setTimeline(t);
-      setErrors(e);
+      setStats(s); setLogs(l.logs); setAgents(a); setTimeline(t); setErrors(e);
       setLastRefresh(new Date());
-    } catch { /* silently ignore */ }
+    } catch { /* silent */ }
     finally { if (!silent) setLoading(false); }
   }, []);
 
@@ -58,119 +57,140 @@ export default function ObservePage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [fetchAll]);
 
-  // Refresh on any socket event (task update or agent log)
   const handleSocketEvent = useCallback(() => fetchAll(true), [fetchAll]);
   const { status: socketStatus } = useSocket({
-    projectId: null, // global — no room filter
+    projectId: null,
     onTaskUpdated: handleSocketEvent,
     onAgentLog: handleSocketEvent,
     onPipelineStage: handleSocketEvent,
   });
 
-  // ── Derived stats ──────────────────────────────────────────────────────────
   const taskTotal      = stats?.tasks.total ?? 0;
   const completedTasks = stats?.tasks.byStatus?.COMPLETED ?? 0;
   const failedTasks    = stats?.tasks.byStatus?.FAILED ?? 0;
   const agentTotal     = stats?.agentRuns.total ?? 0;
   const avgDuration    = stats?.agentRuns.avgDurationMs ?? 0;
   const errorTotal     = stats?.errors.total ?? 0;
-  const errorCount     = errors.length;
+  const successRate    = agentTotal > 0
+    ? Math.round(((stats?.agentRuns.byStatus?.COMPLETED ?? 0) / agentTotal) * 100)
+    : null;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      {/* ── Header ── */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Observability</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            System health, agent activity, and execution logs
-          </p>
+    <PageShell>
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700 bg-[#1a1f2e] px-8">
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-medium text-gray-100">Observability</h1>
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <motion.span
+              className={`h-1.5 w-1.5 rounded-full ${
+                socketStatus === "connected" ? "bg-green-500" :
+                socketStatus === "connecting" ? "bg-amber-400" : "bg-gray-600"
+              }`}
+              animate={socketStatus === "connected" ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
+              transition={socketStatus === "connected"
+                ? { duration: 2, ease: "easeInOut", repeat: Infinity }
+                : { duration: duration.fast }
+              }
+            />
+            {socketStatus === "connected" ? "Live" : socketStatus === "connecting" ? "Connecting" : "Offline"}
+          </span>
         </div>
         <div className="flex items-center gap-3">
-          {/* Socket status */}
-          <span className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className={`h-2 w-2 rounded-full ${
-              socketStatus === "connected" ? "bg-green-500 animate-pulse" :
-              socketStatus === "connecting" ? "bg-yellow-500" : "bg-gray-400"
-            }`} />
-            {socketStatus === "connected" ? "Live" : socketStatus === "connecting" ? "Connecting…" : "Polling"}
-          </span>
           {lastRefresh && (
-            <span className="text-xs text-gray-400">
-              Updated {lastRefresh.toLocaleTimeString()}
-            </span>
+            <span className="text-xs text-gray-500">Updated {lastRefresh.toLocaleTimeString()}</span>
           )}
-          <button
+          <motion.button
             onClick={() => fetchAll()}
             disabled={loading}
-            className="rounded border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+            className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-800/50 disabled:opacity-40"
+            whileTap={buttonTap}
+            transition={{ duration: duration.fast }}
           >
             ↺ Refresh
-          </button>
+          </motion.button>
         </div>
-      </div>
+      </header>
 
-      {/* ── Stat cards ── */}
-      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          label="Total Tasks"
-          value={taskTotal}
-          sub={`${completedTasks} completed · ${failedTasks} failed`}
-          accent="blue"
-        />
-        <StatCard
-          label="Agent Runs"
-          value={agentTotal}
-          sub={`Avg ${avgDuration}ms per run`}
-          accent="green"
-        />
-        <StatCard
-          label="Errors"
-          value={errorTotal}
-          sub={errorTotal === 0 ? "All clear" : "Check error tab"}
-          accent={errorTotal > 0 ? "red" : "gray"}
-        />
-        <StatCard
-          label="Success Rate"
-          value={agentTotal > 0
-            ? `${Math.round(((stats?.agentRuns.byStatus?.COMPLETED ?? 0) / agentTotal) * 100)}%`
-            : "—"}
-          sub={`${stats?.agentRuns.byStatus?.FAILED ?? 0} failed runs`}
-          accent={
-            agentTotal > 0 && (stats?.agentRuns.byStatus?.FAILED ?? 0) === 0 ? "green" : "yellow"
-          }
-        />
-      </div>
+      <main className="flex-1 px-8 py-8">
+        {/* Stat cards — staggered entry */}
+        <motion.div
+          className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4"
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.div variants={fadeUp}>
+            <StatCard label="Total Tasks" value={taskTotal}
+              sub={`${completedTasks} done · ${failedTasks} failed`} accent="indigo" />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <StatCard label="Agent Runs" value={agentTotal}
+              sub={`Avg ${avgDuration}ms`} accent="green" />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <StatCard label="Errors" value={errorTotal}
+              sub={errorTotal === 0 ? "All clear" : "Check errors tab"}
+              accent={errorTotal > 0 ? "red" : "gray"} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <StatCard
+              label="Success Rate"
+              value={successRate !== null ? `${successRate}%` : "—"}
+              sub={`${stats?.agentRuns.byStatus?.FAILED ?? 0} failed runs`}
+              accent={successRate !== null && (stats?.agentRuns.byStatus?.FAILED ?? 0) === 0 ? "green" : "amber"}
+            />
+          </motion.div>
+        </motion.div>
 
-      {/* ── Tabs ── */}
-      <div className="mb-4 flex gap-1 border-b border-gray-200">
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`relative px-4 py-2 text-sm transition-colors ${
-              tab === id
-                ? "font-medium text-gray-900 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-gray-900"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
+        {/* Tabs — layoutId sliding underline */}
+        <div className="mb-6 flex gap-1 border-b border-gray-700">
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`relative px-4 py-2.5 text-sm transition-colors ${
+                tab === id ? "font-medium text-gray-100" : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {label}
+              {id === "errors" && errors.length > 0 && (
+                <motion.span
+                  className="ml-1.5 rounded-full bg-red-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-red-300"
+                  initial={{ scale: 0.7, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: duration.fast }}
+                >
+                  {errors.length}
+                </motion.span>
+              )}
+              {/* Sliding underline indicator */}
+              {tab === id && (
+                <motion.span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"
+                  layoutId="tab-underline"
+                  transition={{ duration: duration.standard, ease: ease.primary }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab panels — fade transition */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: duration.standard, ease: ease.enter }}
           >
-            {label}
-            {id === "errors" && errorCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
-                {errorCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Tab panels ── */}
-      <div>
-        {tab === "logs"     && <LogTable logs={logs} loading={loading} />}
-        {tab === "agents"   && <AgentActivityTable runs={agents} loading={loading} />}
-        {tab === "timeline" && <ExecutionTimeline rows={timeline} loading={loading} />}
-        {tab === "errors"   && <ErrorFeed errors={errors} loading={loading} />}
-      </div>
-    </main>
+            {tab === "logs"     && <LogTable logs={logs} loading={loading} />}
+            {tab === "agents"   && <AgentActivityTable runs={agents} loading={loading} />}
+            {tab === "timeline" && <ExecutionTimeline rows={timeline} loading={loading} />}
+            {tab === "errors"   && <ErrorFeed errors={errors} loading={loading} />}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </PageShell>
   );
 }

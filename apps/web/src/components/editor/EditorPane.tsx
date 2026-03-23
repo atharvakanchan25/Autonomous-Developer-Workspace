@@ -99,7 +99,7 @@ function VersionPanel({ fileId, onRestore, onClose }: VersionPanelProps) {
         {loading ? (
           <p className="px-3 py-4 text-[12px] text-gray-600">Loading…</p>
         ) : versions.length === 0 ? (
-          <p className="px-3 py-4 text-[12px] text-gray-600">No versions yet. Save with "Save Version" to create one.</p>
+          <p className="px-3 py-4 text-[12px] text-gray-600">No versions yet. Save with &quot;Save Version&quot; to create one.</p>
         ) : (
           versions.map((v) => (
             <div key={v.id} className="border-b border-gray-800 px-3 py-2.5">

@@ -1,166 +1,237 @@
 "use client";
 
 import { memo, useCallback, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { Task, TaskStatus } from "@/types";
+import { duration, ease } from "@/lib/motion";
+import { api } from "@/lib/api";
 
-// ── Status colour tokens ─────────────────────────────────────────────────────
-export const STATUS_STYLES: Record<
-  TaskStatus,
-  { border: string; bg: string; badge: string; dot: string }
-> = {
+const STATUS_CONFIG: Record<TaskStatus, { 
+  border: string; 
+  bg: string; 
+  badge: string; 
+  dot: string;
+  shadow: string;
+}> = {
   PENDING: {
-    border: "border-gray-300",
-    bg: "bg-white",
-    badge: "bg-gray-100 text-gray-500",
-    dot: "bg-gray-400",
+    border: "border-gray-700",
+    bg: "bg-[#1a1f2e]",
+    badge: "bg-gray-800 text-gray-400 border-gray-700",
+    dot: "bg-gray-500",
+    shadow: "shadow-sm shadow-black/10",
   },
   IN_PROGRESS: {
-    border: "border-blue-400",
-    bg: "bg-blue-50",
-    badge: "bg-blue-100 text-blue-700",
-    dot: "bg-blue-500",
+    border: "border-indigo-600",
+    bg: "bg-[#1a1f2e]",
+    badge: "bg-indigo-900/60 text-indigo-300 border-indigo-700",
+    dot: "bg-indigo-500",
+    shadow: "shadow-lg shadow-indigo-500/20",
   },
   COMPLETED: {
-    border: "border-green-400",
-    bg: "bg-green-50",
-    badge: "bg-green-100 text-green-700",
+    border: "border-green-600",
+    bg: "bg-[#1a1f2e]",
+    badge: "bg-green-900/60 text-green-300 border-green-700",
     dot: "bg-green-500",
+    shadow: "shadow-sm shadow-black/10",
   },
   FAILED: {
-    border: "border-red-400",
-    bg: "bg-red-50",
-    badge: "bg-red-100 text-red-700",
+    border: "border-red-600",
+    bg: "bg-[#1a1f2e]",
+    badge: "bg-red-900/60 text-red-300 border-red-700",
     dot: "bg-red-500",
+    shadow: "shadow-sm shadow-black/10",
   },
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   PENDING: "Pending",
-  IN_PROGRESS: "In Progress",
+  IN_PROGRESS: "Running",
   COMPLETED: "Completed",
   FAILED: "Failed",
 };
 
-const ALL_STATUSES: TaskStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED"];
-
-// ── Node component ────────────────────────────────────────────────────────────
 interface TaskNodeData {
   task: Task;
   onStatusChange?: (id: string, status: TaskStatus) => void;
+  onNodeClick?: (task: Task) => void;
 }
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+function TaskNodeInner({ data, selected }: NodeProps) {
+  const { task, onNodeClick } = data as unknown as TaskNodeData;
+  const config = STATUS_CONFIG[task.status];
+  const isRunning = task.status === "IN_PROGRESS";
+  const isCompleted = task.status === "COMPLETED";
+  const isFailed = task.status === "FAILED";
+  const [isTriggering, setIsTriggering] = useState(false);
 
-function TaskNodeInner({ data }: NodeProps) {
-  const { task, onStatusChange } = data as unknown as TaskNodeData;
-  const s = STATUS_STYLES[task.status];
-  const [running, setRunning] = useState(false);
-  const [runError, setRunError] = useState<string | null>(null);
+  const handleClick = useCallback(() => {
+    onNodeClick?.(task);
+  }, [task, onNodeClick]);
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      e.stopPropagation();
-      onStatusChange?.(task.id, e.target.value as TaskStatus);
-    },
-    [task.id, onStatusChange],
-  );
-
-  const handleRunPipeline = useCallback(
+  const handleRun = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
-      setRunning(true);
-      setRunError(null);
+      if (task.status !== "PENDING") return;
+      setIsTriggering(true);
       try {
-        const res = await fetch(`${BASE}/api/agents/run`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ taskId: task.id, pipeline: true }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.detail ?? body.error ?? `Failed: ${res.status}`);
-        }
+        await api.agents.run({ taskId: task.id, pipeline: true });
       } catch (err) {
-        setRunError(err instanceof Error ? err.message : "Failed to run pipeline");
+        console.error("Failed to trigger task:", err);
       } finally {
-        setRunning(false);
+        setIsTriggering(false);
       }
     },
-    [task.id],
+    [task.id, task.status],
   );
 
   return (
-    <div
-      className={`w-[220px] rounded-lg border-2 ${s.border} ${s.bg} shadow-sm transition-shadow hover:shadow-md`}
-    >
-      {/* Target handle – left */}
+    <>
       <Handle
         type="target"
-        position={Position.Left}
-        className="!h-2.5 !w-2.5 !border-2 !border-white !bg-slate-400"
+        position={Position.Top}
+        className="!h-2 !w-2 !border-2 !border-[#0f1419] !bg-gray-600 !rounded-full"
       />
 
-      <div className="px-3 py-2.5">
-        {/* Header row */}
-        <div className="mb-1.5 flex items-start justify-between gap-1">
-          <span className="line-clamp-2 text-xs font-semibold leading-tight text-gray-800">
-            {task.title}
-          </span>
-          <span className="ml-1 shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-            #{task.order}
-          </span>
-        </div>
-
-        {/* Description */}
-        {task.description && (
-          <p className="mb-2 line-clamp-2 text-[10px] leading-snug text-gray-500">
-            {task.description}
-          </p>
+      <motion.div
+        onClick={handleClick}
+        className={`
+          relative w-[280px] rounded-xl border-2 ${config.border} ${config.bg} ${config.shadow}
+          cursor-pointer transition-all
+          ${selected ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[#0f1419]' : ''}
+        `}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ 
+          opacity: isRunning ? [0.85, 1, 0.85] : 1,
+          y: 0,
+          scale: selected ? 1.02 : 1,
+        }}
+        whileHover={{ 
+          y: -2,
+          boxShadow: isRunning 
+            ? "0 10px 25px -5px rgba(99, 102, 241, 0.3), 0 8px 10px -6px rgba(99, 102, 241, 0.2)"
+            : "0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2)",
+        }}
+        transition={{
+          opacity: isRunning ? { duration: 1.6, ease: "easeInOut", repeat: Infinity } : { duration: 0.2 },
+          y: { duration: 0.2, ease: ease.enter },
+          scale: { duration: 0.2 },
+          boxShadow: { duration: 0.2 },
+        }}
+        layout
+      >
+        {/* Failure shake animation */}
+        {isFailed && (
+          <motion.div
+            className="absolute inset-0"
+            animate={{ x: [0, -2, 2, -2, 2, 0] }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+          />
         )}
 
-        {/* Status row */}
-        <div className="flex items-center justify-between">
-          <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${s.badge}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-            {STATUS_LABELS[task.status]}
-          </span>
-          <select
-            value={task.status}
-            onChange={handleChange}
-            onClick={(e) => e.stopPropagation()}
-            className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] text-gray-600 focus:outline-none"
-          >
-            {ALL_STATUSES.map((st) => (
-              <option key={st} value={st}>
-                {STATUS_LABELS[st]}
-              </option>
-            ))}
-          </select>
+        <div className="p-4">
+          {/* Header */}
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {/* Status Dot */}
+              <motion.div
+                className={`h-2.5 w-2.5 rounded-full ${config.dot} shrink-0`}
+                animate={isRunning ? { scale: [1, 1.3, 1], opacity: [1, 0.6, 1] } : { scale: 1, opacity: 1 }}
+                transition={isRunning ? { duration: 1.4, ease: "easeInOut", repeat: Infinity } : {}}
+              />
+              
+              {/* Task Title */}
+              <h3 className="text-sm font-semibold text-gray-100 line-clamp-2 leading-tight">
+                {task.title}
+              </h3>
+            </div>
+
+            {/* Order Badge */}
+            <span className="shrink-0 rounded-md bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-400">
+              #{task.order}
+            </span>
+          </div>
+
+          {/* Description */}
+          {task.description && (
+            <p className="mb-3 text-xs leading-relaxed text-gray-400 line-clamp-2">
+              {task.description}
+            </p>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Status Badge */}
+            <motion.div
+              key={task.status}
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium ${config.badge}`}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, ease: ease.enter }}
+            >
+              {STATUS_LABELS[task.status]}
+              
+              {/* Completion Checkmark */}
+              <AnimatePresence>
+                {isCompleted && (
+                  <motion.svg
+                    viewBox="0 0 12 12"
+                    fill="currentColor"
+                    className="h-3 w-3 text-green-400"
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={{ duration: 0.3, ease: ease.enter }}
+                  >
+                    <path d="M10.28 2.28L4.5 8.06 1.72 5.28a.75.75 0 00-1.06 1.06l3.25 3.25a.75.75 0 001.06 0l6.25-6.25a.75.75 0 00-1.06-1.06z" />
+                  </motion.svg>
+                )}
+              </AnimatePresence>
+            </motion.div>
+
+            {/* Run Button */}
+            {task.status === "PENDING" && (
+              <motion.button
+                onClick={handleRun}
+                disabled={isTriggering}
+                className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+              >
+                {isTriggering ? (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                ) : (
+                  <svg viewBox="0 0 12 12" fill="currentColor" className="h-3 w-3">
+                    <path d="M3 2.5v7l6-3.5-6-3.5z" />
+                  </svg>
+                )}
+                Run
+              </motion.button>
+            )}
+          </div>
         </div>
 
-        {/* Run Pipeline button */}
-        <button
-          onClick={handleRunPipeline}
-          disabled={running || task.status === "IN_PROGRESS"}
-          className="mt-2 w-full rounded bg-gray-900 px-2 py-1 text-[10px] font-medium text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
-        >
-          {running ? "Running…" : "▶ Run Pipeline"}
-        </button>
+        {/* Completion Ripple Effect */}
+        <AnimatePresence>
+          {isCompleted && (
+            <motion.div
+              className="absolute inset-0 rounded-xl border-2 border-green-500"
+              initial={{ opacity: 0.6, scale: 1 }}
+              animate={{ opacity: 0, scale: 1.1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            />
+          )}
+        </AnimatePresence>
+      </motion.div>
 
-        {/* Error message */}
-        {runError && (
-          <p className="mt-1 text-[10px] text-red-500 line-clamp-2">{runError}</p>
-        )}
-      </div>
-
-      {/* Source handle – right */}
       <Handle
         type="source"
-        position={Position.Right}
-        className="!h-2.5 !w-2.5 !border-2 !border-white !bg-slate-400"
+        position={Position.Bottom}
+        className="!h-2 !w-2 !border-2 !border-[#0f1419] !bg-gray-600 !rounded-full"
       />
-    </div>
+    </>
   );
 }
 

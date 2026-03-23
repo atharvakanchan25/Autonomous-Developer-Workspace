@@ -1,5 +1,6 @@
 import json
 import re
+import asyncio
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -9,6 +10,7 @@ from src.lib.firestore import db
 from src.lib.errors import not_found, bad_request
 from src.lib.logger import logger
 from src.lib.utils import now_iso
+from src.queue.queue import task_queue, JobData
 
 router = APIRouter()
 
@@ -152,6 +154,22 @@ async def generate_plan(body: GeneratePlanRequest):
     edges = [{"from": dep, "to": t["key"]} for t in tasks for dep in t.get("dependsOn", [])]
 
     logger.info(f"Plan generated: project={body.projectId} tasks={len(tasks)}")
+    
+    # Queue tasks for execution (tasks with no dependencies first)
+    for i, t in enumerate(tasks):
+        if not t.get("dependsOn", []):
+            asyncio.create_task(
+                task_queue.add(
+                    task_refs[i].id,
+                    JobData(
+                        taskId=task_refs[i].id,
+                        projectId=body.projectId,
+                        title=t["title"]
+                    )
+                )
+            )
+            logger.info(f"Queued task for execution: {task_refs[i].id}")
+    
     return {
         "project": project,
         "tasks": saved_tasks,

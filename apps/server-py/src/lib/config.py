@@ -6,6 +6,9 @@ class Config(BaseSettings):
     APP_ENV: Literal["development", "production", "test"] = "development"
     PORT: int = 4000
     GROQ_API_KEY: str
+    FIREBASE_PROJECT_ID: str
+    FIREBASE_CLIENT_EMAIL: str
+    FIREBASE_PRIVATE_KEY: str
     CORS_ORIGIN: str = "http://localhost:3000"
     LOG_LEVEL: Literal["debug", "info", "warning", "error"] = "info"
     RATE_LIMIT_WINDOW_MS: int = 60_000

@@ -3,9 +3,21 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import type { Project } from "@/types";
-import { Spinner, EmptyState, ErrorMessage } from "@/components/Feedback";
+import { PageShell } from "@/components/PageShell";
+import { duration, ease, cardHover, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 export default function ProjectsPage() {
   const searchParams = useSearchParams();
@@ -14,8 +26,6 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Create form state
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [creating, setCreating] = useState(false);
@@ -25,18 +35,12 @@ export default function ProjectsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      setProjects(await api.projects.list());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load projects");
-    } finally {
-      setLoading(false);
-    }
+    try { setProjects(await api.projects.list()); }
+    catch (err) { setError(err instanceof Error ? err.message : "Failed to load projects"); }
+    finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -45,111 +49,167 @@ export default function ProjectsPage() {
     setCreateError(null);
     try {
       await api.projects.create({ name: name.trim(), description: desc.trim() || undefined });
-      setName("");
-      setDesc("");
-      setShowForm(false);
+      setName(""); setDesc(""); setShowForm(false);
       await load();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create project");
-    } finally {
-      setCreating(false);
-    }
+    } finally { setCreating(false); }
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Projects</h1>
-        <button
+    <PageShell>
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700 bg-[#1a1f2e] px-8">
+        <h1 className="text-sm font-medium text-gray-100">Projects</h1>
+        <motion.button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium ${
+            showForm ? "bg-gray-800 text-gray-300" : "bg-indigo-600 text-white"
+          }`}
+          whileTap={buttonTap}
+          transition={{ duration: duration.fast }}
         >
-          {showForm ? "Cancel" : "+ New project"}
-        </button>
-      </div>
+          {showForm ? "Cancel" : (
+            <>
+              <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
+              </svg>
+              New project
+            </>
+          )}
+        </motion.button>
+      </header>
 
-      {showForm && (
-        <form
-          onSubmit={handleCreate}
-          className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-5"
-        >
-          <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-gray-600">Name *</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Project name"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-gray-600">Description</label>
-            <textarea
-              rows={2}
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              placeholder="Optional description"
-              className="w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
-            />
-          </div>
-          {createError && <ErrorMessage message={createError} />}
-          <button
-            type="submit"
-            disabled={creating || !name.trim()}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-          >
-            {creating ? "Creating…" : "Create project"}
-          </button>
-        </form>
-      )}
-
-      {error && <ErrorMessage message={error} />}
-
-      {loading ? (
-        <Spinner />
-      ) : projects.length === 0 ? (
-        <EmptyState message="No projects yet. Create one to get started." />
-      ) : (
-        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-          {projects.map((p) => (
-            <li
-              key={p.id}
-              className={`px-5 py-4 transition-colors hover:bg-gray-50 ${
-                p.id === createdId ? "bg-green-50" : ""
-              }`}
+      <main className="flex-1 px-8 py-8">
+        {/* Animated form reveal */}
+        <AnimatePresence>
+          {showForm && (
+            <motion.form
+              onSubmit={handleCreate}
+              className="mb-8 overflow-hidden rounded-xl border border-gray-700 bg-[#1a1f2e] p-6 shadow-sm"
+              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+              animate={{ opacity: 1, height: "auto", marginBottom: 32 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: duration.standard, ease: ease.enter }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-900">{p.name}</p>
-                  {p.description && (
-                    <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{p.description}</p>
-                  )}
-                  <p className="mt-1 text-xs text-gray-400">
-                    {new Date(p.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-xs text-gray-400">
+              <h2 className="mb-5 text-sm font-semibold text-gray-100">New project</h2>
+              <div className="mb-4">
+                <label className="mb-1.5 block text-xs font-medium text-gray-400">
+                  Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Project name"
+                  className="w-full rounded-lg border border-gray-700 bg-[#0f1419] px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-900/50"
+                />
+              </div>
+              <div className="mb-5">
+                <label className="mb-1.5 block text-xs font-medium text-gray-400">Description</label>
+                <textarea
+                  rows={2}
+                  value={desc}
+                  onChange={(e) => setDesc(e.target.value)}
+                  placeholder="Optional description"
+                  className="w-full resize-none rounded-lg border border-gray-700 bg-[#0f1419] px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-900/50"
+                />
+              </div>
+              {createError && <p className="mb-3 text-xs text-red-400">{createError}</p>}
+              <motion.button
+                type="submit"
+                disabled={creating || !name.trim()}
+                className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                whileTap={buttonTap}
+                transition={{ duration: duration.fast }}
+              >
+                {creating ? "Creating…" : "Create project"}
+              </motion.button>
+            </motion.form>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              className="mb-6 rounded-lg border border-red-900 bg-red-950/90 px-4 py-3 text-sm text-red-300"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: duration.fast }}
+            >
+              {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {loading ? (
+          <div className="flex items-center gap-2 py-12 text-sm text-gray-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400" />
+            Loading projects…
+          </div>
+        ) : projects.length === 0 ? (
+          <motion.div
+            className="rounded-xl border border-dashed border-gray-700 py-16 text-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: duration.standard }}
+          >
+            <p className="text-sm text-gray-500">No projects yet.</p>
+            <p className="mt-1 text-xs text-gray-600">Create one to get started.</p>
+          </motion.div>
+        ) : (
+          <motion.div
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+          >
+            {projects.map((p) => (
+              <motion.div
+                key={p.id}
+                variants={fadeUp}
+                whileHover={cardHover}
+                className={`relative rounded-xl border bg-[#1a1f2e] p-5 shadow-sm ${
+                  p.id === createdId ? "border-indigo-700 ring-1 ring-indigo-700" : "border-gray-700"
+                }`}
+              >
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-900/40">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4 text-indigo-400">
+                      <path d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                    </svg>
+                  </div>
+                  <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[11px] font-medium text-gray-400">
                     {p._count?.tasks ?? 0} task{p._count?.tasks !== 1 ? "s" : ""}
                   </span>
-                  <Link
-                    href={`/graph?projectId=${p.id}`}
-                    className="rounded border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100"
-                  >
-                    View graph ⬡
-                  </Link>
-                  <Link
-                    href={`/tasks?projectId=${p.id}`}
-                    className="rounded border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100"
-                  >
-                    View tasks →
-                  </Link>
                 </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+                <h3 className="mb-1 truncate text-sm font-semibold text-gray-100">{p.name}</h3>
+                {p.description ? (
+                  <p className="mb-4 line-clamp-2 text-xs leading-relaxed text-gray-400">{p.description}</p>
+                ) : (
+                  <p className="mb-4 text-xs text-gray-600">No description</p>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">{timeAgo(p.updatedAt)}</span>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/tasks?projectId=${p.id}`}
+                      className="rounded-md border border-gray-700 px-2.5 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800/50"
+                    >
+                      Tasks
+                    </Link>
+                    <Link
+                      href={`/graph?projectId=${p.id}`}
+                      className="rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-indigo-700"
+                    >
+                      Graph →
+                    </Link>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </main>
+    </PageShell>
   );
 }

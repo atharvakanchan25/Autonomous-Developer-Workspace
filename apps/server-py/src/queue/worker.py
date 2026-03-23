@@ -1,12 +1,43 @@
 import asyncio
 import time
 
-from src.queue.queue import task_queue, Job
+from src.queue.queue import task_queue, Job, JobData
 from src.lib.firestore import db
 from src.lib.logger import logger
 from src.lib.utils import now_iso
 from src.agents.agent_dispatcher import dispatch_pipeline
 from src.modules.cicd.cicd_service import run_cicd_pipeline
+
+
+async def _queue_dependent_tasks(completed_task_id: str, project_id: str) -> None:
+    """Queue tasks that depend on the completed task."""
+    all_tasks = db.collection("tasks").where("projectId", "==", project_id).stream()
+    
+    for task_doc in all_tasks:
+        task_data = task_doc.to_dict()
+        depends_on = task_data.get("dependsOn", [])
+        
+        # Check if this task depends on the completed task
+        if completed_task_id in depends_on:
+            # Check if all dependencies are completed
+            all_deps_completed = True
+            for dep_id in depends_on:
+                dep_doc = db.collection("tasks").document(dep_id).get()
+                if not dep_doc.exists or dep_doc.to_dict().get("status") != "COMPLETED":
+                    all_deps_completed = False
+                    break
+            
+            # Queue if all dependencies are met and task is still pending
+            if all_deps_completed and task_data.get("status") == "PENDING":
+                await task_queue.add(
+                    task_doc.id,
+                    JobData(
+                        taskId=task_doc.id,
+                        projectId=project_id,
+                        title=task_data.get("title", "")
+                    )
+                )
+                logger.info(f"Queued dependent task: {task_doc.id}")
 
 
 async def _process_job(job: Job) -> None:
@@ -32,6 +63,9 @@ async def _process_job(job: Job) -> None:
 
     if all_passed:
         asyncio.create_task(run_cicd_pipeline(project_id, task_id))
+        
+        # Queue dependent tasks
+        await _queue_dependent_tasks(task_id, project_id)
 
     duration_ms = int((time.monotonic() - started_at) * 1000)
     status_label = "COMPLETED" if all_passed else "FAILED"

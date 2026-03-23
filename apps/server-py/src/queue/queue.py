@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable
+from src.lib.logger import logger
 
 
 @dataclass
@@ -32,10 +33,12 @@ class InMemoryQueue:
     async def add(self, job_id: str, data: JobData) -> Job:
         existing = self._jobs.get(job_id)
         if existing and existing.state != "failed":
+            logger.info(f"Job {job_id} already exists with state {existing.state}, skipping")
             return existing
         job = Job(id=job_id, data=data)
         self._jobs[job_id] = job
         await self._queue.put(job)
+        logger.info(f"Job {job_id} added to queue for task {data.taskId}")
         return job
 
     def update_job(self, job_id: str, **kwargs) -> None:
@@ -55,10 +58,15 @@ class InMemoryQueue:
         return counts
 
     async def start_worker(self) -> None:
+        logger.info("Queue worker started and waiting for jobs...")
         while True:
-            job = await self._queue.get()
-            for handler in self._handlers:
-                asyncio.create_task(handler(job))
+            try:
+                job = await self._queue.get()
+                logger.info(f"Worker received job: {job.id} for task {job.data.taskId}")
+                for handler in self._handlers:
+                    asyncio.create_task(handler(job))
+            except Exception as e:
+                logger.error(f"Worker error: {e}")
 
 
 task_queue = InMemoryQueue()

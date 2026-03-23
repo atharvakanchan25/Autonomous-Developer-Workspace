@@ -84,7 +84,28 @@ def get_agent_activity(limit: int = Query(50, le=200)):
         .limit(limit)
         .stream()
     )
-    return [{"id": d.id, **d.to_dict()} for d in snap]
+    
+    results = []
+    for d in snap:
+        agent_run = {"id": d.id, **d.to_dict()}
+        # Fetch the task to get its title
+        task_id = agent_run.get("taskId")
+        if task_id:
+            task_doc = db.collection("tasks").document(task_id).get()
+            if task_doc.exists:
+                task_data = task_doc.to_dict()
+                agent_run["task"] = {
+                    "id": task_doc.id,
+                    "title": task_data.get("title", "Unknown Task"),
+                    "status": task_data.get("status", "UNKNOWN")
+                }
+            else:
+                agent_run["task"] = {"id": task_id, "title": "Unknown Task", "status": "UNKNOWN"}
+        else:
+            agent_run["task"] = {"id": "", "title": "Unknown Task", "status": "UNKNOWN"}
+        results.append(agent_run)
+    
+    return results
 
 
 @router.get("/timeline")
@@ -103,6 +124,18 @@ def get_execution_timeline(
     timeline = []
     for d in q.limit(limit).stream():
         task = {"id": d.id, **d.to_dict()}
+        
+        # Fetch project info
+        project_id = task.get("projectId")
+        if project_id:
+            project_doc = db.collection("projects").document(project_id).get()
+            if project_doc.exists:
+                task["project"] = {"id": project_doc.id, "name": project_doc.to_dict().get("name", "Unknown")}
+            else:
+                task["project"] = {"id": project_id, "name": "Unknown"}
+        else:
+            task["project"] = {"id": "", "name": "Unknown"}
+        
         stages = [
             {"id": r.id, **r.to_dict()}
             for r in db.collection("agentRuns")

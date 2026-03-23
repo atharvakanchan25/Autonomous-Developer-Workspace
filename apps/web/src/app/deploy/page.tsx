@@ -2,21 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
 import { DeploymentCard } from "@/components/cicd/DeploymentCard";
 import { ProjectSelect } from "@/components/ProjectSelect";
 import type { Deployment } from "@/types";
 import type { DeploymentUpdatedPayload } from "@/lib/socket.events";
-
-const SOCKET_DOT: Record<string, string> = {
-  connected: "bg-green-500 animate-pulse",
-  connecting: "bg-yellow-500",
-  disconnected: "bg-gray-400",
-};
-const SOCKET_LABEL: Record<string, string> = {
-  connected: "Live", connecting: "Connecting…", disconnected: "Polling",
-};
+import { PageShell } from "@/components/PageShell";
+import { duration, ease, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
 
 export default function DeployPage() {
   const searchParams = useSearchParams();
@@ -68,10 +62,7 @@ export default function DeployPage() {
     });
   }, [selectedId]);
 
-  const { status: socketStatus } = useSocket({
-    projectId: selectedId || null,
-    onDeploymentUpdated: handleDeploymentUpdated,
-  });
+  const { status: socketStatus } = useSocket({ projectId: selectedId || null, onDeploymentUpdated: handleDeploymentUpdated });
 
   async function handleTrigger() {
     if (!selectedId) return;
@@ -82,73 +73,103 @@ export default function DeployPage() {
     finally { setTriggering(false); }
   }
 
-  const activeCount  = deployments.filter((d) => d.status === "RUNNING").length;
-  const successCount = deployments.filter((d) => d.status === "SUCCESS").length;
-  const failedCount  = deployments.filter((d) => d.status === "FAILED").length;
+  const stats = [
+    { label: "Total", value: deployments.length, color: "text-gray-900" },
+    { label: "Running", value: deployments.filter((d) => d.status === "RUNNING").length, color: "text-indigo-600" },
+    { label: "Success", value: deployments.filter((d) => d.status === "SUCCESS").length, color: "text-green-600" },
+    { label: "Failed", value: deployments.filter((d) => d.status === "FAILED").length, color: "text-red-600" },
+  ];
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-8">
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Deployments</h1>
-          <p className="mt-0.5 text-sm text-gray-500">CI/CD pipeline — tests → build → preview</p>
+    <PageShell>
+      {/* Top bar */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700 bg-[#1a1f2e] px-8">
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-medium text-gray-100">Deployments</h1>
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                socketStatus === "connected" ? "bg-green-500" :
+                socketStatus === "connecting" ? "bg-amber-400 animate-pulse" : "bg-gray-600"
+              }`}
+            />
+            {socketStatus === "connected" ? "Live" : socketStatus === "connecting" ? "Connecting" : "Offline"}
+          </span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className={`h-2 w-2 rounded-full ${SOCKET_DOT[socketStatus]}`} />
-            {SOCKET_LABEL[socketStatus]}
-          </span>
           <ProjectSelect value={selectedId} onChange={handleProjectChange} />
-          <button
+          <motion.button
             onClick={handleTrigger}
             disabled={!selectedId || triggering}
-            className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            whileTap={buttonTap}
+            transition={{ duration: duration.fast }}
           >
-            {triggering ? "Triggering…" : "▶ Deploy"}
-          </button>
+            {triggering ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            ) : (
+              <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM6.5 5.5l4 2.5-4 2.5V5.5z" />
+              </svg>
+            )}
+            {triggering ? "Triggering…" : "Deploy"}
+          </motion.button>
         </div>
-      </div>
+      </header>
 
-      {/* Stats */}
-      {selectedId && deployments.length > 0 && (
-        <div className="mb-6 flex gap-4">
-          {[
-            { label: "Total",   value: deployments.length, color: "text-gray-700" },
-            { label: "Running", value: activeCount,         color: "text-blue-600" },
-            { label: "Success", value: successCount,        color: "text-green-600" },
-            { label: "Failed",  value: failedCount,         color: "text-red-600" },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-center">
-              <p className={`text-xl font-semibold ${color}`}>{value}</p>
-              <p className="text-xs text-gray-500">{label}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <main className="flex-1 px-8 py-8">
+        {/* Stats */}
+        {selectedId && deployments.length > 0 && (
+          <motion.div
+            className="mb-6 flex gap-3"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+          >
+            {stats.map(({ label, value, color }) => (
+              <motion.div key={label} variants={fadeUp} className="rounded-xl border border-gray-700 bg-[#1a1f2e] px-5 py-4 shadow-sm">
+                <p className={`text-2xl font-semibold ${color.replace('gray-900', 'gray-100').replace('indigo-600', 'indigo-400').replace('green-600', 'green-400').replace('red-600', 'red-400')}`}>{value}</p>
+                <p className="mt-0.5 text-xs text-gray-400">{label}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
 
-      {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
+        {error && (
+          <div className="mb-5 rounded-lg border border-red-900 bg-red-950/90 px-4 py-3 text-sm text-red-300">{error}</div>
+        )}
 
-      {!selectedId ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-16 text-center">
-          <p className="text-sm text-gray-400">Select a project to view deployments</p>
-        </div>
-      ) : loading ? (
-        <div className="flex justify-center py-12">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" />
-        </div>
-      ) : deployments.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-16 text-center">
-          <p className="text-sm text-gray-400">No deployments yet.</p>
-          <p className="mt-1 text-xs text-gray-400">Deployments trigger automatically when a task pipeline completes, or click ▶ Deploy above.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {deployments.map((d) => <DeploymentCard key={d.id} deployment={d} />)}
-        </div>
-      )}
-    </main>
+        {!selectedId ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-700 py-20">
+            <p className="text-sm text-gray-500">Select a project to view deployments</p>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center gap-2 py-12 text-sm text-gray-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-700 border-t-gray-400" />
+            Loading deployments…
+          </div>
+        ) : deployments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-700 py-20 text-center">
+            <p className="text-sm text-gray-500">No deployments yet.</p>
+            <p className="mt-1 text-xs text-gray-600">
+              Deployments trigger automatically when a task pipeline completes.
+            </p>
+          </div>
+        ) : (
+          <motion.div
+            className="space-y-3"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+          >
+            {deployments.map((d) => (
+              <motion.div key={d.id} variants={fadeUp}>
+                <DeploymentCard deployment={d} />
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </main>
+    </PageShell>
   );
 }

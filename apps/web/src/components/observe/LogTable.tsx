@@ -4,20 +4,15 @@ import { useState } from "react";
 import type { ObsLog, LogLevel } from "@/types";
 
 const LEVEL_STYLES: Record<LogLevel, string> = {
-  DEBUG: "bg-gray-100 text-gray-500",
-  INFO:  "bg-blue-50  text-blue-700",
-  WARN:  "bg-yellow-50 text-yellow-700",
-  ERROR: "bg-red-50   text-red-700",
+  DEBUG: "bg-gray-800 text-gray-400",
+  INFO:  "bg-indigo-900/60 text-indigo-300",
+  WARN:  "bg-amber-900/60 text-amber-300",
+  ERROR: "bg-red-900/60 text-red-300",
 };
 
 const LEVELS: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR"];
 
-interface LogTableProps {
-  logs: ObsLog[];
-  loading?: boolean;
-}
-
-export function LogTable({ logs, loading }: LogTableProps) {
+export function LogTable({ logs, loading }: { logs: ObsLog[]; loading?: boolean }) {
   const [levelFilter, setLevelFilter] = useState<LogLevel | "ALL">("ALL");
   const [search, setSearch] = useState("");
 
@@ -28,67 +23,67 @@ export function LogTable({ logs, loading }: LogTableProps) {
   });
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search messages…"
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-gray-700 bg-[#1a1f2e] px-3.5 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-900/50"
         />
         <div className="flex gap-1">
           {(["ALL", ...LEVELS] as const).map((l) => (
             <button
               key={l}
               onClick={() => setLevelFilter(l)}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 levelFilter === l
-                  ? "bg-gray-900 text-white"
-                  : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  ? "bg-indigo-600 text-white"
+                  : "border border-gray-700 bg-[#1a1f2e] text-gray-400 hover:bg-gray-800/50"
               }`}
             >
               {l}
             </button>
           ))}
         </div>
-        <span className="ml-auto text-xs text-gray-400">{filtered.length} entries</span>
+        <span className="ml-auto text-xs text-gray-500">{filtered.length} entries</span>
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200">
+      <div className="overflow-hidden rounded-xl border border-gray-700 bg-[#1a1f2e] shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-gray-500">
-              <tr>
-                <th className="px-3 py-2 font-medium">Time</th>
-                <th className="px-3 py-2 font-medium">Level</th>
-                <th className="px-3 py-2 font-medium">Source</th>
-                <th className="px-3 py-2 font-medium">Agent</th>
-                <th className="px-3 py-2 font-medium">Message</th>
-                <th className="px-3 py-2 font-medium">Duration</th>
+            <thead>
+              <tr className="border-b border-gray-700 bg-gray-800/50">
+                <th className="px-5 py-3 text-left font-medium text-gray-400">Time</th>
+                <th className="px-5 py-3 text-left font-medium text-gray-400">Level</th>
+                <th className="px-5 py-3 text-left font-medium text-gray-400">Source</th>
+                <th className="px-5 py-3 text-left font-medium text-gray-400">Agent</th>
+                <th className="px-5 py-3 text-left font-medium text-gray-400">Message</th>
+                <th className="px-5 py-3 text-left font-medium text-gray-400">Duration</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-700">
               {loading ? (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">Loading…</td></tr>
+                <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-500">Loading…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">No logs found</td></tr>
+                <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-500">No logs found</td></tr>
               ) : (
                 filtered.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-3 py-2 font-mono text-gray-400">
+                  <tr key={log.id} className="transition-colors hover:bg-gray-800/50">
+                    <td className="whitespace-nowrap px-5 py-3 font-mono text-gray-500">
                       {new Date(log.createdAt).toLocaleTimeString()}
                     </td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${LEVEL_STYLES[log.level]}`}>
+                    <td className="px-5 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${LEVEL_STYLES[log.level]}`}>
                         {log.level}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-gray-500">{log.source}</td>
-                    <td className="px-3 py-2 text-purple-600">{log.agentType ?? "—"}</td>
-                    <td className="max-w-xs truncate px-3 py-2 text-gray-800">{log.message}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-gray-400">
+                    <td className="px-5 py-3 text-gray-400">{log.source}</td>
+                    <td className="px-5 py-3 text-indigo-400">{log.agentType ?? "—"}</td>
+                    <td className="max-w-xs truncate px-5 py-3 text-gray-300">{log.message}</td>
+                    <td className="whitespace-nowrap px-5 py-3 text-gray-500">
                       {log.durationMs != null ? `${log.durationMs}ms` : "—"}
                     </td>
                   </tr>

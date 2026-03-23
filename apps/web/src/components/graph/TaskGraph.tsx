@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -14,9 +14,12 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { TaskNode } from "./TaskNode";
+import { AnimatedEdge } from "./AnimatedEdge";
+import { NodeDetailsDrawer } from "./NodeDetailsDrawer";
 import type { Task, TaskStatus } from "@/types";
 
 const NODE_TYPES = { taskNode: TaskNode };
+const EDGE_TYPES = { animated: AnimatedEdge };
 
 interface TaskGraphProps {
   nodes: Node[];
@@ -25,62 +28,134 @@ interface TaskGraphProps {
   onStatusChange: (taskId: string, status: TaskStatus) => void;
 }
 
-export function TaskGraph({ nodes: initialNodes, edges: initialEdges, onStatusChange }: TaskGraphProps) {
-  // Inject the callback into every node's data so TaskNode can call it
-  const nodesWithCallback = useMemo(
-    () =>
-      initialNodes.map((n) => ({
-        ...n,
-        data: { ...n.data, onStatusChange },
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [initialNodes],
+export function TaskGraph({ nodes: initialNodes, edges: initialEdges, tasks, onStatusChange }: TaskGraphProps) {
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [, , onNodesChange] = useNodesState(initialNodes);
+  const [, , onEdgesChange] = useEdgesState(initialEdges);
+
+  // Build a set of task IDs that are currently running
+  const runningTaskIds = useMemo(
+    () => new Set(tasks.filter((t) => t.status === "IN_PROGRESS").map((t) => t.id)),
+    [tasks],
   );
 
-  const [, , onNodesChange] = useNodesState(nodesWithCallback);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  // Handle node click
+  const handleNodeClick = useCallback((task: Task) => {
+    setSelectedTask(task);
+    setSelectedNodeId(task.id);
+  }, []);
 
-  // Sync external node/edge updates into RF state
+  // Sync nodes with task data and add click handler
   const syncedNodes = useMemo(
+    () => initialNodes.map((n) => ({
+      ...n,
+      selected: n.id === selectedNodeId,
+      data: {
+        ...n.data,
+        onStatusChange,
+        onNodeClick: handleNodeClick,
+      },
+    })),
+    [initialNodes, onStatusChange, handleNodeClick, selectedNodeId],
+  );
+
+  // Get connected node IDs for highlighting
+  const connectedNodeIds = useMemo(() => {
+    if (!selectedNodeId) return new Set<string>();
+    
+    const connected = new Set<string>([selectedNodeId]);
+    
+    // Add upstream (dependencies)
+    initialEdges.forEach((edge) => {
+      if (edge.target === selectedNodeId) {
+        connected.add(String(edge.source));
+      }
+    });
+    
+    // Add downstream (dependents)
+    initialEdges.forEach((edge) => {
+      if (edge.source === selectedNodeId) {
+        connected.add(String(edge.target));
+      }
+    });
+    
+    return connected;
+  }, [selectedNodeId, initialEdges]);
+
+  // Mark edges as active when their source task is running, and highlight connected edges
+  const animatedEdges = useMemo(
     () =>
-      initialNodes.map((n) => ({
-        ...n,
-        data: { ...n.data, onStatusChange },
-      })),
-    [initialNodes, onStatusChange],
+      initialEdges.map((e) => {
+        const isActive = runningTaskIds.has(String(e.source));
+        const isHighlighted = selectedNodeId && (
+          e.source === selectedNodeId || e.target === selectedNodeId
+        );
+        
+        return {
+          ...e,
+          type: "animated",
+          data: { active: isActive, highlighted: isHighlighted },
+          animated: isActive,
+        };
+      }),
+    [initialEdges, runningTaskIds, selectedNodeId],
   );
 
   const miniMapNodeColor = useCallback((node: Node) => {
     const task = (node.data as { task: Task }).task;
     const map: Record<TaskStatus, string> = {
-      PENDING: "#d1d5db",
-      IN_PROGRESS: "#93c5fd",
-      COMPLETED: "#86efac",
-      FAILED: "#fca5a5",
+      PENDING:     "#e5e7eb",
+      IN_PROGRESS: "#6366f1",
+      COMPLETED:   "#22c55e",
+      FAILED:      "#ef4444",
     };
-    return map[task.status] ?? "#d1d5db";
+    return map[task.status] ?? "#e5e7eb";
   }, []);
 
   return (
-    <ReactFlow
-      nodes={syncedNodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      nodeTypes={NODE_TYPES}
-      fitView
-      fitViewOptions={{ padding: 0.2 }}
-      minZoom={0.2}
-      maxZoom={2}
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e2e8f0" />
-      <Controls showInteractive={false} className="!border-gray-200 !shadow-sm" />
-      <MiniMap
-        nodeColor={miniMapNodeColor}
-        maskColor="rgba(241,245,249,0.7)"
-        className="!border-gray-200 !shadow-sm"
-      />
-    </ReactFlow>
+    <>
+      <ReactFlow
+        nodes={syncedNodes}
+        edges={animatedEdges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
+        fitView
+        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+        minZoom={0.3}
+        maxZoom={1.5}
+        proOptions={{ hideAttribution: true }}
+        onPaneClick={() => {
+          setSelectedNodeId(null);
+          setSelectedTask(null);
+        }}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1}
+          color="#374151"
+          style={{ backgroundColor: "#0f1419" }}
+        />
+        <Controls
+          showInteractive={false}
+          className="!rounded-xl !border !border-gray-700 !bg-[#1a1f2e] !shadow-lg"
+        />
+        <MiniMap
+          nodeColor={miniMapNodeColor}
+          maskColor="rgba(15, 20, 25, 0.85)"
+          className="!rounded-xl !border !border-gray-700 !shadow-lg !bg-[#1a1f2e]"
+          pannable
+          zoomable
+        />
+      </ReactFlow>
+
+      <NodeDetailsDrawer task={selectedTask} onClose={() => {
+        setSelectedTask(null);
+        setSelectedNodeId(null);
+      }} />
+    </>
   );
 }
