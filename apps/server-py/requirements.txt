@@ -8,3 +8,4 @@ firebase-admin
 groq
 slowapi
 python-multipart
+mcp[cli]>=1.0.0

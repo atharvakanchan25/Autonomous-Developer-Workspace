@@ -1,5 +1,6 @@
 from src.lib.socket import sio
 from src.lib.firestore import db
+from src.lib.logger import logger
 from src.lib.utils import now_iso
 from src.lib.socket_events import (
     TaskUpdatedPayload, AgentLogPayload,
@@ -28,8 +29,8 @@ async def emit_agent_log(payload: AgentLogPayload):
             "agentRunId": payload.agentRunId,
             "createdAt": payload.timestamp or now_iso(),
         })
-    except Exception:
-        pass  # Don't fail on logging errors
+    except Exception as e:
+        logger.warning(f"Failed to persist observability log: {e}")
     
     await sio.emit("agent:log", payload.model_dump(), room=_room(payload.projectId))
 

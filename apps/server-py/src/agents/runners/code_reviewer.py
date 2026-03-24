@@ -9,13 +9,18 @@ class CodeReviewerAgent:
     description = "Reviews generated code and tests, produces a structured markdown report."
 
     async def run(self, ctx: AgentContext) -> AgentResult:
-        # Get project language for proper code fence syntax
         from src.lib.firestore import db
-        project_doc = db.collection("projects").document(ctx.projectId).get()
-        language = "python"  # default
-        if project_doc.exists:
-            project_data = project_doc.to_dict()
-            language = project_data.get("language", "python").lower()
+        from src.lib.cache import project_cache
+        cached = project_cache.get(ctx.projectId)
+        if cached:
+            language = cached.get("language", "python").lower()
+        else:
+            project_doc = db.collection("projects").document(ctx.projectId).get()
+            language = "python"
+            if project_doc.exists:
+                data = project_doc.to_dict()
+                language = data.get("language", "python").lower()
+                project_cache.set(ctx.projectId, data)
         
         def _get_artifact(agent_type: AgentType, art_type: str):
             prev = ctx.previousOutputs.get(agent_type)
