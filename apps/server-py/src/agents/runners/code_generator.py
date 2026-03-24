@@ -42,13 +42,18 @@ class CodeGeneratorAgent:
     description = "Generates implementation code for a given task in the detected language."
 
     async def run(self, ctx: AgentContext) -> AgentResult:
-        # Get project language
         from src.lib.firestore import db
-        project_doc = db.collection("projects").document(ctx.projectId).get()
-        language = "python"  # default
-        if project_doc.exists:
-            project_data = project_doc.to_dict()
-            language = project_data.get("language", "python").lower()
+        from src.lib.cache import project_cache
+        cached = project_cache.get(ctx.projectId)
+        if cached:
+            language = cached.get("language", "python").lower()
+        else:
+            project_doc = db.collection("projects").document(ctx.projectId).get()
+            language = "python"
+            if project_doc.exists:
+                data = project_doc.to_dict()
+                language = data.get("language", "python").lower()
+                project_cache.set(ctx.projectId, data)
         
         extension = LANGUAGE_EXTENSIONS.get(language, ".txt")
         src_dir = LANGUAGE_DIRS.get(language, "src")
@@ -63,11 +68,13 @@ class CodeGeneratorAgent:
                 "- Include all necessary imports at the top.\n"
                 "- Add concise docstrings/comments on public functions only.\n"
                 "- Keep the implementation focused on exactly what the task describes.\n"
+                "- If the task involves UI/frontend, produce a single self-contained component file.\n"
+                "- Do NOT generate multiple files — output exactly one file's worth of code.\n"
                 "- Follow proper naming conventions for the language.\n"
                 "- Structure code with proper separation of concerns."
             )),
             LlmMessage(role="user", content=f"Task: {ctx.taskTitle}\n\nDescription: {ctx.taskDescription}\n\nProject context: {ctx.projectId}"),
-        ])
+        ], max_tokens=8192)
 
         # Create proper filename with directory structure
         base_name = re.sub(r"[^a-z0-9]+", "_", ctx.taskTitle.lower()).strip("_")[:50]

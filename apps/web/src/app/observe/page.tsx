@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
+import { useProjectStore } from "@/lib/useProjectStore";
 import { ProjectSelect } from "@/components/ProjectSelect";
 import type { SummaryStats, ObsLog, AgentRunRow, TimelineRow } from "@/types";
 import { StatCard } from "@/components/observe/StatCard";
@@ -27,7 +28,13 @@ const AUTO_REFRESH_MS = 10_000;
 
 export default function ObservePage() {
   const [tab, setTab] = useState<Tab>("logs");
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const { projectId: storedId, setProjectId } = useProjectStore();
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(storedId);
+
+  const handleProjectChange = useCallback((id: string) => {
+    setSelectedProjectId(id);
+    setProjectId(id);
+  }, [setProjectId]);
   const [stats, setStats]       = useState<SummaryStats | null>(null);
   const [logs, setLogs]         = useState<ObsLog[]>([]);
   const [agents, setAgents]     = useState<AgentRunRow[]>([]);
@@ -85,7 +92,7 @@ export default function ObservePage() {
           <h1 className="text-sm font-medium text-gray-100">Observability</h1>
           <ProjectSelect
             value={selectedProjectId}
-            onChange={setSelectedProjectId}
+            onChange={handleProjectChange}
             placeholder="All Projects (Total)"
             className="border-gray-700 bg-[#252d3d] text-gray-300 text-xs"
           />

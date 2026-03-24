@@ -37,13 +37,18 @@ class TestGeneratorAgent:
     description = "Generates a test suite for a task, using generated code if available."
 
     async def run(self, ctx: AgentContext) -> AgentResult:
-        # Get project language
         from src.lib.firestore import db
-        project_doc = db.collection("projects").document(ctx.projectId).get()
-        language = "python"  # default
-        if project_doc.exists:
-            project_data = project_doc.to_dict()
-            language = project_data.get("language", "python").lower()
+        from src.lib.cache import project_cache
+        cached = project_cache.get(ctx.projectId)
+        if cached:
+            language = cached.get("language", "python").lower()
+        else:
+            project_doc = db.collection("projects").document(ctx.projectId).get()
+            language = "python"
+            if project_doc.exists:
+                data = project_doc.to_dict()
+                language = data.get("language", "python").lower()
+                project_cache.set(ctx.projectId, data)
         
         test_framework = TEST_FRAMEWORKS.get(language, "appropriate testing framework")
         test_dir = TEST_DIRS.get(language, "tests")
@@ -66,10 +71,11 @@ class TestGeneratorAgent:
                 "- Cover: happy path, edge cases, and error cases.\n"
                 "- Mock external dependencies (databases, HTTP calls) appropriately.\n"
                 "- Each test must have a clear, descriptive name.\n"
+                "- If the implementation is a UI component, write rendering and interaction tests.\n"
                 "- Follow the language's testing conventions."
             )),
             LlmMessage(role="user", content=f"Task: {ctx.taskTitle}\n\nDescription: {ctx.taskDescription}{code_context}"),
-        ])
+        ], max_tokens=8192)
 
         base = re.sub(r"[^a-z0-9]+", "_", ctx.taskTitle.lower()).strip("_")[:50]
         
