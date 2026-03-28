@@ -385,14 +385,20 @@ Autonomous-Developer-Workspace/
 │   │
 │   └── web/                          # Frontend (React)
 │       └── src/
-│           ├── app/                  # Pages
-│           │   ├── page.tsx          # Home
-│           │   ├── graph/            # Task graph
-│           │   ├── editor/           # Code editor
-│           │   ├── deploy/           # CI/CD view
-│           │   ├── observe/          # Dashboard
-│           │   ├── projects/         # Project list
-│           │   └── tasks/            # Task list
+│           ├── app/
+│           │   ├── (auth)/           # Auth pages
+│           │   │   ├── login/        # Login page
+│           │   │   ├── signup/       # Signup page
+│           │   │   └── forgot-password/  # Password reset
+│           │   │
+│           │   └── (main)/           # Main app pages
+│           │       ├── page.tsx      # Home
+│           │       ├── graph/        # Task graph
+│           │       ├── editor/       # Code editor
+│           │       ├── deploy/       # CI/CD view
+│           │       ├── observe/      # Dashboard
+│           │       ├── projects/     # Project list
+│           │       └── tasks/        # Task list
 │           │
 │           ├── components/           # React components
 │           │   ├── graph/            # Graph components
