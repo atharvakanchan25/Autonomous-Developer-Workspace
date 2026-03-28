@@ -64,6 +64,7 @@ function TaskNodeInner({ data, selected }: NodeProps) {
   const isCompleted = task.status === "COMPLETED";
   const isFailed = task.status === "FAILED";
   const [isTriggering, setIsTriggering] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const handleClick = useCallback(() => {
     onNodeClick?.(task);
@@ -83,6 +84,22 @@ function TaskNodeInner({ data, selected }: NodeProps) {
       }
     },
     [task.id, task.status],
+  );
+
+  const handleRetry = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setIsRetrying(true);
+      try {
+        await api.tasks.updateStatus(task.id, "PENDING");
+        await api.agents.run({ taskId: task.id, pipeline: true });
+      } catch (err) {
+        console.error("Failed to retry task:", err);
+      } finally {
+        setIsRetrying(false);
+      }
+    },
+    [task.id],
   );
 
   return (
@@ -267,17 +284,43 @@ function TaskNodeInner({ data, selected }: NodeProps) {
           )}
 
           {isFailed && (
-            <motion.div
-              className="flex items-center justify-center gap-2 rounded-xl bg-red-500/20 border border-red-500/50 px-4 py-2.5 text-sm font-bold text-red-300"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1, x: [0, -3, 3, -3, 3, 0] }}
-              transition={{ x: { duration: 0.5 } }}
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
-                <path d="M8 0a8 8 0 100 16A8 8 0 008 0zM7 4a1 1 0 112 0v4a1 1 0 11-2 0V4zm1 8a1 1 0 100-2 1 1 0 000 2z" />
-              </svg>
-              Failed
-            </motion.div>
+            <div className="flex flex-col gap-2">
+              <motion.div
+                className="flex items-center justify-center gap-2 rounded-xl bg-red-500/20 border border-red-500/50 px-4 py-2 text-xs font-bold text-red-300"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1, x: [0, -3, 3, -3, 3, 0] }}
+                transition={{ x: { duration: 0.5 } }}
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                  <path d="M8 0a8 8 0 100 16A8 8 0 008 0zM7 4a1 1 0 112 0v4a1 1 0 11-2 0V4zm1 8a1 1 0 100-2 1 1 0 000 2z" />
+                </svg>
+                Pipeline Failed
+              </motion.div>
+              <motion.button
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-amber-500 disabled:opacity-60 transition-colors"
+                whileHover={{ scale: 1.02, boxShadow: "0 0 20px rgba(217, 119, 6, 0.5)" }}
+                whileTap={{ scale: 0.98 }}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+              >
+                {isRetrying ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Retrying...
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
+                      <path d="M13.5 2.5a.5.5 0 00-.5.5v1.38A6 6 0 102 8a.5.5 0 001 0 5 5 0 115 5 5 5 0 01-3.54-1.46l1.27-1.27A.5.5 0 005.5 9.5h-3a.5.5 0 00-.5.5v3a.5.5 0 00.85.35L4.1 12.1A7 7 0 1014 8V3a.5.5 0 00-.5-.5z" />
+                    </svg>
+                    Retry Pipeline
+                  </>
+                )}
+              </motion.button>
+            </div>
           )}
         </div>
 

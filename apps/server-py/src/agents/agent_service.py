@@ -8,6 +8,7 @@ from src.agents.agent_types import AgentType
 from src.agents.runners.code_generator import CodeGeneratorAgent
 from src.agents.runners.test_generator import TestGeneratorAgent
 from src.agents.runners.code_reviewer import CodeReviewerAgent
+from src.agents.runners.scaffold_agent import ScaffoldAgent
 from src.lib.firestore import db
 from src.lib.errors import not_found, bad_request
 from src.lib.logger import logger
@@ -20,6 +21,7 @@ def bootstrap_agents() -> None:
     register_agent(CodeGeneratorAgent())
     register_agent(TestGeneratorAgent())
     register_agent(CodeReviewerAgent())
+    register_agent(ScaffoldAgent())
     logger.info(f"All agents registered: {[a.type.value for a in list_agents()]}")
 
 

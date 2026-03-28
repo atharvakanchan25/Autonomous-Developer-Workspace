@@ -6,6 +6,7 @@ class AgentType(str, Enum):
     CODE_GENERATOR = "CODE_GENERATOR"
     TEST_GENERATOR = "TEST_GENERATOR"
     CODE_REVIEWER = "CODE_REVIEWER"
+    SCAFFOLD = "SCAFFOLD"
 
 
 class AgentRunStatus(str, Enum):
@@ -42,6 +43,10 @@ class AgentResult:
 class AgentContext:
     taskId: str
     projectId: str
+    projectName: str
+    projectDescription: str
+    language: str
+    framework: str
     taskTitle: str
     taskDescription: str
     previousOutputs: dict[AgentType, AgentResult] = field(default_factory=dict)

@@ -9,20 +9,20 @@ from src.lib.utils import now_iso
 from src.lib.auth import AuthUser, get_current_user
 from src.queue.queue import task_queue, JobData
 
+import asyncio
 import json
 import re
-import asyncio
 
 router = APIRouter()
 
-_SYSTEM_PROMPT = """You are a senior software architect. Your job is to break down a software project description into a structured execution plan.
+_SYSTEM_PROMPT = """You are a senior software architect. Your job is to break down a software project description into a structured execution plan AND choose the single best technology stack for it.
 
 You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
 
 The JSON must conform exactly to this structure:
 {
-  "language": "string (primary programming language: python, javascript, typescript, java, go, rust, etc.)",
-  "framework": "string (optional framework/library if mentioned)",
+  "language": "string (the BEST programming language for this specific project — e.g. a CLI tool → python, a web app with UI → javascript/typescript, a system tool → go or rust, a data pipeline → python, a mobile app → swift/kotlin)",
+  "framework": "string (the most appropriate framework — e.g. React, FastAPI, Express, Flask, Gin, etc. Empty string if none needed)",
   "tasks": [
     {
       "key": "string (short unique snake_case identifier)",
@@ -34,9 +34,20 @@ The JSON must conform exactly to this structure:
   ]
 }
 
-Rules:
-- Detect the primary programming language from the project description. If not specified, choose the most appropriate one.
-- Generate between 4 and 12 tasks.
+Language selection rules:
+- Simple to-do app / task manager / CRUD app → javascript with React (frontend) or python with Flask/FastAPI (backend API)
+- Web app with UI that users interact with → javascript or typescript with React
+- REST API / backend service → python (FastAPI) or javascript (Express) or go (Gin)
+- CLI tool / script → python
+- Real-time app / chat → javascript/typescript with Node.js
+- Data science / ML / analysis → python
+- System programming / performance critical → go or rust
+- Mobile app → swift (iOS) or kotlin (Android)
+- If the description says "web app" or implies a browser UI → javascript/typescript
+- NEVER default to python for frontend or UI projects
+
+Task rules:
+- Generate between 4 and 10 tasks.
 - Every key must be unique, lowercase, snake_case, max 40 chars.
 - dependsOn must only reference keys defined in the same tasks array.
 - The dependency graph must be a valid DAG — no cycles.
@@ -45,48 +56,59 @@ Rules:
 _FEW_SHOT_EXAMPLE = {
     "role": "user",
     "content": (
-        "Project description: Build a simple REST API for a blog with posts and comments\n\n"
-        + json.dumps({"language": "python", "framework": "FastAPI", "tasks": [
-            {"key": "setup_project", "title": "Initialise project and install dependencies",
-             "description": "Create the Python project, configure virtual environment, and install FastAPI and other core dependencies.",
+        "Project description: Build a simple to-do list web app\n\n"
+        + json.dumps({"language": "javascript", "framework": "React", "tasks": [
+            {"key": "setup", "title": "Initialise React project",
+             "description": "Create React app with Vite, configure ESLint and folder structure.",
              "order": 1, "dependsOn": []},
-            {"key": "design_schema", "title": "Design data models",
-             "description": "Define Pydantic models for Post and Comment with appropriate fields.",
-             "order": 2, "dependsOn": ["setup_project"]},
-            {"key": "posts_api", "title": "Implement Posts CRUD endpoints",
-             "description": "Build GET /posts, POST /posts, GET /posts/{id}, PUT /posts/{id}, DELETE /posts/{id}.",
-             "order": 3, "dependsOn": ["design_schema"]},
-            {"key": "comments_api", "title": "Implement Comments CRUD endpoints",
-             "description": "Build GET /posts/{id}/comments and POST /posts/{id}/comments endpoints.",
-             "order": 4, "dependsOn": ["design_schema"]},
-            {"key": "error_handling", "title": "Add global error handling and input validation",
-             "description": "Implement Pydantic validation schemas and a centralised FastAPI exception handler.",
-             "order": 5, "dependsOn": ["posts_api", "comments_api"]},
-            {"key": "write_tests", "title": "Write integration tests",
-             "description": "Cover all endpoints with integration tests using pytest and httpx.",
-             "order": 6, "dependsOn": ["error_handling"]},
+            {"key": "task_model", "title": "Define task data model and state",
+             "description": "Define the Task shape and set up useState/useReducer for the task list.",
+             "order": 2, "dependsOn": ["setup"]},
+            {"key": "task_list", "title": "Build TaskList and TaskItem components",
+             "description": "Render the list of tasks with completed/pending styling.",
+             "order": 3, "dependsOn": ["task_model"]},
+            {"key": "add_task", "title": "Implement add task form",
+             "description": "Input field and button to add new tasks to the list.",
+             "order": 4, "dependsOn": ["task_model"]},
+            {"key": "actions", "title": "Implement delete and complete toggle",
+             "description": "Add handlers to mark tasks complete and delete them.",
+             "order": 5, "dependsOn": ["task_list", "add_task"]},
+            {"key": "persist", "title": "Persist tasks to localStorage",
+             "description": "Save and load tasks from localStorage so they survive page refresh.",
+             "order": 6, "dependsOn": ["actions"]},
         ]})
     ),
 }
 
 
 async def _call_llm(description: str) -> tuple[str, int]:
-    response = await groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            _FEW_SHOT_EXAMPLE,
-            {"role": "user", "content": f"Project description: {description.strip()}"},
-        ],
-        max_tokens=2048,
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
-    content = response.choices[0].message.content or ""
-    if not content:
-        raise bad_request("LLM returned an empty response")
-    tokens_used = response.usage.total_tokens if response.usage else 0
-    return content, tokens_used
+    import re as _re
+    from groq import RateLimitError
+    for attempt in range(1, 6):
+        try:
+            response = await groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    _FEW_SHOT_EXAMPLE,
+                    {"role": "user", "content": f"Project description: {description.strip()}"},
+                ],
+                max_tokens=2048,
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content or ""
+            if not content:
+                raise bad_request("LLM returned an empty response")
+            tokens_used = response.usage.total_tokens if response.usage else 0
+            return content, tokens_used
+        except RateLimitError as err:
+            if attempt == 5:
+                raise
+            match = _re.search(r"try again in ([\d.]+)s", str(err), _re.IGNORECASE)
+            wait = float(match.group(1)) + 1.0 if match else 15.0
+            logger.warning(f"Groq rate limit on plan generation — waiting {wait:.1f}s (attempt {attempt})")
+            await asyncio.sleep(wait)
 
 
 def _parse_response(raw: str) -> dict:
@@ -160,7 +182,7 @@ async def generate_plan(body: GeneratePlanRequest, user: AuthUser = Depends(get_
         "updatedAt": now,
     })
     
-    batch.commit()
+    batch.commit()  # tasks must be in Firestore before the worker reads them
 
     saved_tasks = [
         {
@@ -189,14 +211,12 @@ async def generate_plan(body: GeneratePlanRequest, user: AuthUser = Depends(get_
     # Queue tasks for execution (tasks with no dependencies first)
     for i, t in enumerate(tasks):
         if not t.get("dependsOn", []):
-            asyncio.create_task(
-                task_queue.add(
-                    task_refs[i].id,
-                    JobData(
-                        taskId=task_refs[i].id,
-                        projectId=body.projectId,
-                        title=t["title"]
-                    )
+            await task_queue.add(
+                task_refs[i].id,
+                JobData(
+                    taskId=task_refs[i].id,
+                    projectId=body.projectId,
+                    title=t["title"]
                 )
             )
             logger.info(f"Queued task for execution: {task_refs[i].id}")

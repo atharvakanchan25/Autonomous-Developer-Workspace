@@ -1,7 +1,13 @@
+import asyncio
+import re
 from dataclasses import dataclass
+from groq import AsyncGroq, RateLimitError
 from src.lib.groq import groq_client
+from src.lib.logger import logger
 
 DEFAULT_MODEL = "llama-3.3-70b-versatile"
+_MAX_RETRIES = 6
+_BASE_WAIT = 15.0
 
 
 @dataclass
@@ -14,6 +20,11 @@ class LlmMessage:
 class LlmResult:
     content: str
     tokensUsed: int
+
+
+def _parse_retry_after(err: RateLimitError) -> float:
+    match = re.search(r"try again in ([\d.]+)s", str(err), re.IGNORECASE)
+    return float(match.group(1)) + 1.0 if match else _BASE_WAIT
 
 
 async def call_llm(
@@ -33,8 +44,15 @@ async def call_llm(
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
 
-    response = await groq_client.chat.completions.create(**kwargs)
-
-    content = response.choices[0].message.content or ""
-    tokens_used = response.usage.total_tokens if response.usage else 0
-    return LlmResult(content=content, tokensUsed=tokens_used)
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            response = await groq_client.chat.completions.create(**kwargs)
+            content = response.choices[0].message.content or ""
+            tokens_used = response.usage.total_tokens if response.usage else 0
+            return LlmResult(content=content, tokensUsed=tokens_used)
+        except RateLimitError as err:
+            if attempt == _MAX_RETRIES:
+                raise
+            wait = _parse_retry_after(err)
+            logger.warning(f"Groq rate limit — waiting {wait:.1f}s (attempt {attempt}/{_MAX_RETRIES - 1})")
+            await asyncio.sleep(wait)

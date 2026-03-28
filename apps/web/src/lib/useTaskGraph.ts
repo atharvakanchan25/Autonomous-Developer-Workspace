@@ -23,7 +23,7 @@ function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
   // Arrange in two columns with even spacing
   const arranged: Node[] = [];
   const columnWidth = 500;  // Distance between columns
-  const rowHeight = 180;    // Distance between rows
+  const rowHeight = 280;    // Distance between rows
   const startX = 150;       // Left margin
   const startY = 100;       // Top margin
   

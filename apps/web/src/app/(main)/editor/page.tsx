@@ -6,9 +6,10 @@ import { api } from "@/lib/api";
 import { useFileTree } from "@/lib/useFileTree";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { EditorPane } from "@/components/editor/EditorPane";
-import { LivePreview } from "@/components/editor/LivePreview";
 import { RenameModal } from "@/components/editor/RenameModal";
 import { ProjectSelect } from "@/components/ProjectSelect";
+import { auth } from "@/lib/firebase";
+import { webConfig } from "@/lib/config";
 import type { ProjectFile } from "@/types";
 
 export default function EditorPage() {
@@ -19,11 +20,10 @@ export default function EditorPage() {
   const [activeFile, setActiveFile] = useState<ProjectFile | null>(null);
   const [renameTarget, setRenameTarget] = useState<ProjectFile | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const { tree, loading, refresh, addFile, updateFile, removeFile } =
     useFileTree(selectedProjectId || null);
-
-  const allFiles = tree;
 
   function handleProjectChange(id: string) {
     setSelectedProjectId(id);
@@ -74,6 +74,31 @@ export default function EditorPage() {
     setActiveFile(file);
   }, [updateFile]);
 
+  const handleDownload = useCallback(async () => {
+    if (!selectedProjectId) return;
+    setDownloading(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`${webConfig.apiUrl}/api/files/download/${selectedProjectId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("content-disposition") ?? "";
+      const match = disposition.match(/filename=([^;]+)/);
+      a.download = match ? match[1].trim() : "project.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  }, [selectedProjectId]);
+
   const handleSelect = useCallback(async (file: ProjectFile) => {
     if (file.content !== undefined && file.content !== null) {
       setActiveFile(file);
@@ -106,11 +131,12 @@ export default function EditorPage() {
               ↺
             </button>
             <button
-              onClick={() => api.files.download(selectedProjectId)}
-              className="rounded border border-indigo-500/50 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="rounded border border-indigo-500/50 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300 disabled:opacity-50"
               title="Download project as ZIP"
             >
-              ⬇ Download Project
+              {downloading ? "Downloading…" : "⬇ Download Project"}
             </button>
           </>
         )}
@@ -148,11 +174,6 @@ export default function EditorPage() {
         {/* Editor */}
         <div className="flex-1 overflow-hidden">
           <EditorPane file={activeFile} onSaved={handleSaved} />
-        </div>
-        
-        {/* Live Preview */}
-        <div className="w-96 shrink-0 border-l border-white/10 bg-[#1E1E1E]">
-          <LivePreview file={activeFile} projectId={selectedProjectId} allFiles={allFiles} />
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import time
+import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
@@ -7,7 +8,7 @@ from src.lib.logger import logger
 from src.lib.errors import not_found
 from src.lib.utils import now_iso
 from src.lib import emitter
-from src.lib.cache import task_cache
+from src.lib.cache import task_cache, project_cache
 from src.lib.socket_events import AgentLogPayload, PipelineStagePayload, TaskUpdatedPayload
 from src.agents.agent_registry import get_agent
 from src.agents.agent_types import AgentType, AgentRunStatus, AgentContext, AgentResult
@@ -31,6 +32,8 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
         if result.status != "COMPLETED" or not result.result:
             continue
         for artifact in result.result.artifacts:
+            if not artifact.filename:  # empty filename = in-memory only (e.g. reviews)
+                continue
             files_ref = db.collection("projectFiles")
             existing_docs = list(
                 files_ref
@@ -43,16 +46,23 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
                 doc = existing_docs[0]
                 data = doc.to_dict()
                 if data.get("content"):
-                    db.collection("fileVersions").add({
-                        "fileId": doc.id,
-                        "content": data["content"],
-                        "size": data.get("size", 0),
-                        "label": f"Before agent overwrite ({result.agentType})",
-                        "createdAt": now_iso(),
-                    })
+                    # For review files, append instead of overwrite
+                    if artifact.type == "review":
+                        new_content = data["content"] + "\n\n---\n\n" + artifact.content
+                    else:
+                        db.collection("fileVersions").add({
+                            "fileId": doc.id,
+                            "content": data["content"],
+                            "size": data.get("size", 0),
+                            "label": f"Before agent overwrite ({result.agentType})",
+                            "createdAt": now_iso(),
+                        })
+                        new_content = artifact.content
+                else:
+                    new_content = artifact.content
                 doc.reference.update({
-                    "content": artifact.content,
-                    "size": len(artifact.content.encode("utf-8")),
+                    "content": new_content,
+                    "size": len(new_content.encode("utf-8")),
                     "language": artifact.language,
                     "updatedAt": now_iso(),
                 })
@@ -60,13 +70,25 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
                 files_ref.add({
                     "projectId": project_id,
                     "path": artifact.filename,
-                    "name": artifact.filename,
+                    "name": artifact.filename.split("/")[-1],
                     "language": artifact.language,
                     "content": artifact.content,
                     "size": len(artifact.content.encode("utf-8")),
                     "createdAt": now_iso(),
                     "updatedAt": now_iso(),
                 })
+
+
+def _get_project(project_id: str) -> dict:
+    cached = project_cache.get(project_id)
+    if cached:
+        return cached
+    doc = db.collection("projects").document(project_id).get()
+    if not doc.exists:
+        raise not_found("Project")
+    data = {"id": doc.id, **doc.to_dict()}
+    project_cache.set(project_id, data)
+    return data
 
 
 def _get_task(task_id: str) -> dict:
@@ -90,10 +112,15 @@ async def dispatch_agent(
 
     task = _get_task(task_id)
     project_id: str = task["projectId"]
+    project = _get_project(project_id)
 
     ctx = AgentContext(
         taskId=task["id"],
         projectId=project_id,
+        projectName=project.get("name", ""),
+        projectDescription=project.get("description", ""),
+        language=project.get("language", "python").lower(),
+        framework=project.get("framework", ""),
         taskTitle=task["title"],
         taskDescription=task.get("description", task["title"]),
         previousOutputs=previous_outputs,
@@ -133,7 +160,7 @@ async def dispatch_agent(
         run_ref.update({
             "status": AgentRunStatus.COMPLETED.value,
             "output": str(result),
-            "tokensUsed": result.result.tokensUsed if result.result else 0,
+            "tokensUsed": result.tokensUsed if result else 0,
             "durationMs": duration_ms,
             "updatedAt": now_iso(),
         })
@@ -240,5 +267,119 @@ async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
     except Exception as err:
         logger.error(f"Failed to persist artifacts: {err}", exc_info=True)
 
+    # Check if ALL tasks in the project are now complete — if so, run scaffold
+    asyncio.create_task(_maybe_run_scaffold(project_id))
+
     logger.info(f"Pipeline completed: task={task_id} stages={len(results)}")
     return results
+
+
+async def _maybe_run_scaffold(project_id: str) -> None:
+    """Run the scaffold agent once when every task in the project is COMPLETED."""
+    try:
+        all_tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
+        if not all_tasks:
+            return
+        statuses = [t.to_dict().get("status") for t in all_tasks]
+        if not all(s == "COMPLETED" for s in statuses):
+            return
+
+        # Check if README already exists (avoid re-running on retry)
+        existing = list(
+            db.collection("projectFiles")
+            .where("projectId", "==", project_id)
+            .where("path", "==", "README.md")
+            .limit(1)
+            .stream()
+        )
+        if existing:
+            return
+
+        logger.info(f"All tasks complete — running scaffold for project={project_id}")
+        project = _get_project(project_id)
+
+        # Collect all persisted file paths AND in-memory review artifacts from agentRuns
+        file_docs = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
+        all_file_paths = [d.to_dict().get("path", "") for d in file_docs]
+
+        # Fetch all completed agent runs to collect review artifacts
+        run_docs = list(
+            db.collection("agentRuns")
+            .where("projectId", "==", project_id)
+            .where("status", "==", "COMPLETED")
+            .stream()
+        )
+        review_artifacts = []
+        code_artifacts = []
+        test_artifacts = []
+        from src.agents.agent_types import Artifact, AgentResult as AR
+        for doc in file_docs:
+            data = doc.to_dict()
+            path = data.get("path", "")
+            lang = data.get("language", "")
+            content = data.get("content", "")
+            if path.startswith("src/") or path.startswith("pkg/") or path.startswith("lib/"):
+                code_artifacts.append(Artifact(type="code", filename=path, content=content, language=lang))
+            elif path.startswith("tests/") or path.startswith("spec/"):
+                test_artifacts.append(Artifact(type="test", filename=path, content=content, language=lang))
+
+        # Collect review text from observability logs
+        review_logs = list(
+            db.collection("observabilityLogs")
+            .where("projectId", "==", project_id)
+            .where("agentType", "==", "CODE_REVIEWER")
+            .stream()
+        )
+        # Get full review output from agentRuns
+        reviewer_runs = [
+            d for d in run_docs
+            if d.to_dict().get("agentType") == "CODE_REVIEWER"
+        ]
+        for run in reviewer_runs:
+            output = run.to_dict().get("output", "")
+            if output and len(output) > 50:
+                review_artifacts.append(Artifact(type="review", filename="", content=output, language="markdown"))
+
+        synthetic_code = AR(agentType=AgentType.CODE_GENERATOR, summary="",
+                            artifacts=code_artifacts, rawLlmOutput="", tokensUsed=0)
+        synthetic_test = AR(agentType=AgentType.TEST_GENERATOR, summary="",
+                            artifacts=test_artifacts, rawLlmOutput="", tokensUsed=0)
+        synthetic_review = AR(agentType=AgentType.CODE_REVIEWER, summary="",
+                              artifacts=review_artifacts, rawLlmOutput="", tokensUsed=0)
+
+        ctx = AgentContext(
+            taskId="scaffold",
+            projectId=project_id,
+            projectName=project.get("name", ""),
+            projectDescription=project.get("description", ""),
+            language=project.get("language", "python").lower(),
+            framework=project.get("framework", ""),
+            taskTitle="Project Scaffold",
+            taskDescription="Generate README and dependency file",
+            previousOutputs={
+                AgentType.CODE_GENERATOR: synthetic_code,
+                AgentType.TEST_GENERATOR: synthetic_test,
+                AgentType.CODE_REVIEWER:  synthetic_review,
+            },
+        )
+
+        from src.agents.agent_registry import get_agent
+        scaffold = get_agent(AgentType.SCAFFOLD)
+        result = await scaffold.run(ctx)  # type: ignore[attr-defined]
+
+        # Persist scaffold artifacts
+        for artifact in result.artifacts:
+            db.collection("projectFiles").add({
+                "projectId": project_id,
+                "path": artifact.filename,
+                "name": artifact.filename.split("/")[-1],
+                "language": artifact.language,
+                "content": artifact.content,
+                "size": len(artifact.content.encode("utf-8")),
+                "createdAt": now_iso(),
+                "updatedAt": now_iso(),
+            })
+
+        logger.info(f"Scaffold complete for project={project_id}: {[a.filename for a in result.artifacts]}")
+    except Exception as err:
+        logger.error(f"Scaffold failed for project={project_id}: {err}", exc_info=True)
