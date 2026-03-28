@@ -49,7 +49,7 @@ async def _process_job(job: Job) -> None:
 
     task_doc = db.collection("tasks").document(task_id).get()
     if not task_doc.exists:
-        logger.error(f"Task not found — skipping: task={task_id}")
+        logger.error(f"Task not found - skipping: task={task_id}")
         return
 
     if task_doc.to_dict().get("status") == "COMPLETED":

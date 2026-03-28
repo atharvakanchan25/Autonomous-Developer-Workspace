@@ -22,6 +22,7 @@ from src.modules.ai.ai_service import router as ai_router
 from src.modules.files.files_service import router as files_router
 from src.modules.cicd.cicd_service import router as cicd_router
 from src.modules.observability.observability_service import router as observe_router
+from src.modules.admin.admin_service import router as admin_router
 from src.queue.queue import task_queue
 
 import src.queue.worker  # noqa: F401 — registers the job handler as a side effect
@@ -29,12 +30,22 @@ import src.queue.worker  # noqa: F401 — registers the job handler as a side ef
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    bootstrap_agents()
-    worker_task = asyncio.create_task(task_queue.start_worker())
-    logger.info(f"Server starting — env={config.APP_ENV} port={config.PORT}")
-    yield
-    worker_task.cancel()
-    logger.info("Server shut down cleanly")
+    """Application lifecycle manager."""
+    try:
+        bootstrap_agents()
+        worker_task = asyncio.create_task(task_queue.start_worker())
+        logger.info(f"[OK] Server started - env={config.APP_ENV} port={config.PORT}")
+        yield
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+        raise
+    finally:
+        try:
+            worker_task.cancel()
+            await worker_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("[OK] Server shut down")
 
 
 # slowapi expects "<count> per <period>" e.g. "200 per minute"
@@ -63,6 +74,7 @@ app.include_router(agents_router,   prefix="/api/agents")
 app.include_router(files_router,    prefix="/api/files")
 app.include_router(cicd_router,     prefix="/api/cicd")
 app.include_router(observe_router,  prefix="/api/observe")
+app.include_router(admin_router,    prefix="/api/admin")
 
 
 @app.get("/health")
@@ -93,3 +105,5 @@ app.mount("/mcp", mcp.streamable_http_app())
 
 # ── Mount Socket.IO ───────────────────────────────────────────────────────────
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
+

@@ -1,24 +1,23 @@
-# ── Node / Next.js ────────────────────────────────────────────────────────────
-node_modules
-.next
-*.log
-
-# ── Python ────────────────────────────────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-.venv/
-venv/
-*.egg-info/
-dist/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# ── Logs ──────────────────────────────────────────────────────────────────────
-logs/
-
-# ── Environment ───────────────────────────────────────────────────────────────
+# Environment files
 .env
 .env.local
-.env.*.local
+.env.production
+.env.development
+
+# Firebase credentials
+firebase-adminsdk-*.json
+serviceAccountKey.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+.next/
+
+# OS
+.DS_Store
+Thumbbs.db

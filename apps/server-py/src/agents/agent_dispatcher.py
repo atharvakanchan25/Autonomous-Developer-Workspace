@@ -99,11 +99,14 @@ async def dispatch_agent(
         previousOutputs=previous_outputs,
     )
 
+    prompt = f"{ctx.taskTitle}\n\n{ctx.taskDescription}"
     run_ref = db.collection("agentRuns").add({
         "taskId": task_id,
+        "projectId": project_id,
         "agentType": agent_type.value,
         "status": AgentRunStatus.RUNNING.value,
-        "input": str(ctx),
+        "prompt": prompt,
+        "tokensUsed": 0,
         "createdAt": now_iso(),
         "updatedAt": now_iso(),
     })[1]
@@ -130,6 +133,7 @@ async def dispatch_agent(
         run_ref.update({
             "status": AgentRunStatus.COMPLETED.value,
             "output": str(result),
+            "tokensUsed": result.result.tokensUsed if result.result else 0,
             "durationMs": duration_ms,
             "updatedAt": now_iso(),
         })

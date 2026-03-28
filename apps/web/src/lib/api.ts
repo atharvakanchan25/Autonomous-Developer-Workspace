@@ -1,4 +1,5 @@
 import { webConfig } from "./config";
+import { auth } from "./firebase";
 import type {
   Project,
   Task,
@@ -22,8 +23,12 @@ import type {
 const BASE = webConfig.apiUrl;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = await auth.currentUser?.getIdToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     ...init,
   });
 
@@ -43,6 +48,10 @@ export const api = {
     get: (id: string) => request<Project>(`/api/projects/${id}`),
     create: (data: CreateProjectPayload) =>
       request<Project>("/api/projects/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: CreateProjectPayload) =>
+      request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<void>(`/api/projects/${id}`, { method: "DELETE" }),
   },
   tasks: {
     list: (projectId?: string) =>
@@ -57,6 +66,13 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ status }),
       }),
+    assign: (id: string, assignedTo: string) =>
+      request<Task>(`/api/tasks/${id}/assign`, {
+        method: "PATCH",
+        body: JSON.stringify({ assignedTo }),
+      }),
+    delete: (id: string) =>
+      request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
   },
   ai: {
     generatePlan: (data: GeneratePlanPayload) =>

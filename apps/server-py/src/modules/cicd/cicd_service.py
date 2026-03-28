@@ -1,9 +1,6 @@
-import asyncio
-import random
-from typing import Optional
-
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 
 from src.lib.firestore import db
 from src.lib.errors import not_found
@@ -11,6 +8,10 @@ from src.lib import emitter
 from src.lib.socket_events import DeploymentUpdatedPayload, CicdStageLog
 from src.lib.logger import logger
 from src.lib.utils import now_iso
+from src.lib.auth import AuthUser, get_current_user, log_action
+
+import asyncio
+import random
 
 router = APIRouter()
 
@@ -116,17 +117,34 @@ class TriggerCicdRequest(BaseModel):
 
 
 @router.post("/deploy")
-async def trigger_cicd(body: TriggerCicdRequest):
-    if not db.collection("projects").document(body.projectId).get().exists:
+async def trigger_cicd(body: TriggerCicdRequest, user: AuthUser = Depends(get_current_user)):
+    """Trigger CI/CD pipeline for a project."""
+    project_doc = db.collection("projects").document(body.projectId).get()
+    if not project_doc.exists:
         raise not_found("Project")
+    
+    # Check access: admin can deploy any project, users only their own
+    project_data = project_doc.to_dict()
+    if not user.can_access_resource(project_data.get("ownerId")):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     asyncio.create_task(run_cicd_pipeline(body.projectId, body.taskId))
+    await log_action(user, "CICD_TRIGGER", {"projectId": body.projectId, "taskId": body.taskId})
     return {"message": "CI/CD pipeline triggered"}
 
 
 @router.get("/deployments")
-def list_deployments(projectId: str):
-    if not db.collection("projects").document(projectId).get().exists:
+async def list_deployments(projectId: str, user: AuthUser = Depends(get_current_user)):
+    """List deployments for a project."""
+    project_doc = db.collection("projects").document(projectId).get()
+    if not project_doc.exists:
         raise not_found("Project")
+    
+    # Check access
+    project_data = project_doc.to_dict()
+    if not user.can_access_resource(project_data.get("ownerId")):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     snap = (
         db.collection("deployments")
         .where("projectId", "==", projectId)
@@ -138,8 +156,21 @@ def list_deployments(projectId: str):
 
 
 @router.get("/deployments/{deployment_id}")
-def get_deployment(deployment_id: str):
+async def get_deployment(deployment_id: str, user: AuthUser = Depends(get_current_user)):
+    """Get deployment details."""
     doc = db.collection("deployments").document(deployment_id).get()
     if not doc.exists:
         raise not_found("Deployment")
-    return {"id": doc.id, **doc.to_dict()}
+    
+    deployment_data = doc.to_dict()
+    project_id = deployment_data.get("projectId")
+    
+    # Check access via project ownership
+    if project_id:
+        project_doc = db.collection("projects").document(project_id).get()
+        if project_doc.exists:
+            project_data = project_doc.to_dict()
+            if not user.can_access_resource(project_data.get("ownerId")):
+                raise HTTPException(status_code=403, detail="Access denied")
+    
+    return {"id": doc.id, **deployment_data}

@@ -5,6 +5,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useProjectStore } from "@/lib/useProjectStore";
+import { useAuth } from "@/lib/useAuth";
+import { AdminOnlyToast } from "@/components/AdminOnlyToast";
 import type { Project, Task, TaskStatus } from "@/types";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageShell } from "@/components/PageShell";
@@ -17,6 +19,9 @@ export default function TasksPage() {
   const router = useRouter();
   const projectIdParam = searchParams.get("projectId") ?? "";
   const { projectId: storedId, setProjectId } = useProjectStore();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [adminToast, setAdminToast] = useState(false);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -71,10 +76,15 @@ export default function TasksPage() {
     }
   }
 
-  async function handleStatusChange(taskId: string, status: TaskStatus) {
+  async function handleStatusChange(task: Task, status: TaskStatus) {
+    // Non-admins can only update their own tasks
+    if (!isAdmin && task.ownerId !== user?.uid) {
+      setAdminToast(true);
+      return;
+    }
     try {
-      const updated = await api.tasks.updateStatus(taskId, status);
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
+      const updated = await api.tasks.updateStatus(task.id, status);
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
     } catch { /* silent */ }
   }
 
@@ -232,8 +242,10 @@ export default function TasksPage() {
                     <td className="px-5 py-3.5">
                       <select
                         value={task.status}
-                        onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
-                        className="rounded-md border border-gray-700 bg-[#0f1419] px-2 py-1 text-xs text-gray-400 focus:outline-none"
+                        onChange={(e) => handleStatusChange(task, e.target.value as TaskStatus)}
+                        disabled={!isAdmin && task.ownerId !== user?.uid}
+                        className="rounded-md border border-gray-700 bg-[#0f1419] px-2 py-1 text-xs text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                        title={!isAdmin && task.ownerId !== user?.uid ? "Only admins can update other users' tasks" : undefined}
                       >
                         {ALL_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                       </select>
@@ -245,6 +257,12 @@ export default function TasksPage() {
           </div>
         )}
       </main>
+
+      <AdminOnlyToast
+        show={adminToast}
+        onClose={() => setAdminToast(false)}
+        message="You can only update status on your own tasks."
+      />
     </PageShell>
   );
 }

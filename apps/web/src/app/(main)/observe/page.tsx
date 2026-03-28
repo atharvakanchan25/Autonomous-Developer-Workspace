@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
 import { useProjectStore } from "@/lib/useProjectStore";
 import { ProjectSelect } from "@/components/ProjectSelect";
+import { useAuth } from "@/lib/useAuth";
+import { AdminOnlyToast } from "@/components/AdminOnlyToast";
 import type { SummaryStats, ObsLog, AgentRunRow, TimelineRow } from "@/types";
 import { StatCard } from "@/components/observe/StatCard";
 import { LogTable } from "@/components/observe/LogTable";
@@ -24,10 +26,15 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "errors",   label: "Errors" },
 ];
 
+const ADMIN_TABS: Tab[] = ["logs", "errors"];
+
 const AUTO_REFRESH_MS = 10_000;
 
 export default function ObservePage() {
-  const [tab, setTab] = useState<Tab>("logs");
+  const [tab, setTab] = useState<Tab>("agents");
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [adminToast, setAdminToast] = useState(false);
   const { projectId: storedId, setProjectId } = useProjectStore();
   const [selectedProjectId, setSelectedProjectId] = useState<string>(storedId);
 
@@ -48,18 +55,27 @@ export default function ObservePage() {
     if (!silent) setLoading(true);
     try {
       const projectFilter = selectedProjectId || undefined;
-      const [s, l, a, t, e] = await Promise.all([
+      const fetches: Promise<any>[] = [
         api.observe.summary(projectFilter),
-        api.observe.logs({ limit: "200", ...(projectFilter && { projectId: projectFilter }) }),
         api.observe.agents(100, projectFilter),
         api.observe.timeline(projectFilter),
-        api.observe.errors(50, projectFilter),
-      ]);
-      setStats(s); setLogs(l.logs); setAgents(a); setTimeline(t); setErrors(e);
+      ];
+      // logs and errors are admin-only on the backend
+      if (isAdmin) {
+        fetches.push(
+          api.observe.logs({ limit: "200", ...(projectFilter && { projectId: projectFilter }) }),
+          api.observe.errors(50, projectFilter),
+        );
+      }
+      const results = await Promise.all(fetches);
+      setStats(results[0]);
+      setAgents(results[1]);
+      setTimeline(results[2]);
+      if (isAdmin) { setLogs(results[3].logs); setErrors(results[4]); }
       setLastRefresh(new Date());
     } catch { /* silent */ }
     finally { if (!silent) setLoading(false); }
-  }, [selectedProjectId]);
+  }, [selectedProjectId, isAdmin]);
 
   useEffect(() => {
     fetchAll();
@@ -160,35 +176,45 @@ export default function ObservePage() {
 
         {/* Tabs — layoutId sliding underline */}
         <div className="mb-6 flex gap-1 border-b border-gray-700">
-          {TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`relative px-4 py-2.5 text-sm transition-colors ${
-                tab === id ? "font-medium text-gray-100" : "text-gray-400 hover:text-gray-200"
-              }`}
-            >
-              {label}
-              {id === "errors" && errors.length > 0 && (
-                <motion.span
-                  className="ml-1.5 rounded-full bg-red-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-red-300"
-                  initial={{ scale: 0.7, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: duration.fast }}
-                >
-                  {errors.length}
-                </motion.span>
-              )}
-              {/* Sliding underline indicator */}
-              {tab === id && (
-                <motion.span
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"
-                  layoutId="tab-underline"
-                  transition={{ duration: duration.standard, ease: ease.primary }}
-                />
-              )}
-            </button>
-          ))}
+          {TABS.map(({ id, label }) => {
+            const restricted = ADMIN_TABS.includes(id) && !isAdmin;
+            return (
+              <button
+                key={id}
+                onClick={() => {
+                  if (restricted) { setAdminToast(true); return; }
+                  setTab(id);
+                }}
+                className={`relative px-4 py-2.5 text-sm transition-colors ${
+                  restricted
+                    ? "cursor-not-allowed text-gray-600"
+                    : tab === id ? "font-medium text-gray-100" : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {label}
+                {restricted && (
+                  <span className="ml-1 text-[10px] text-red-600">🔒</span>
+                )}
+                {id === "errors" && !restricted && errors.length > 0 && (
+                  <motion.span
+                    className="ml-1.5 rounded-full bg-red-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-red-300"
+                    initial={{ scale: 0.7, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: duration.fast }}
+                  >
+                    {errors.length}
+                  </motion.span>
+                )}
+                {tab === id && !restricted && (
+                  <motion.span
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"
+                    layoutId="tab-underline"
+                    transition={{ duration: duration.standard, ease: ease.primary }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab panels — fade transition */}
@@ -207,6 +233,12 @@ export default function ObservePage() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <AdminOnlyToast
+        show={adminToast}
+        onClose={() => setAdminToast(false)}
+        message="System logs and error feeds are restricted to admins."
+      />
     </PageShell>
   );
 }

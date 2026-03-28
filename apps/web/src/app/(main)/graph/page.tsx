@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useTaskGraph } from "@/lib/useTaskGraph";
 import { useProjectStore } from "@/lib/useProjectStore";
+import { useAuth } from "@/lib/useAuth";
+import { AdminOnlyToast } from "@/components/AdminOnlyToast";
 import type { TaskStatus } from "@/types";
 import { AgentLogFeed } from "@/components/AgentLogFeed";
 import { ProjectSelect } from "@/components/ProjectSelect";
@@ -34,19 +36,29 @@ export default function GraphPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { projectId: storedId, setProjectId } = useProjectStore();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [adminToast, setAdminToast] = useState(false);
 
-  // URL param takes priority on first load, then fall back to stored
   const urlId = searchParams.get("projectId") ?? "";
   const [selectedId, setSelectedId] = useState<string>(urlId || storedId);
   const [showLogs, setShowLogs] = useState(true);
 
-  // Sync URL → store on mount if URL has an id
   useEffect(() => {
     if (urlId && urlId !== storedId) setProjectId(urlId);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { nodes, edges, tasks, loading, error, lastUpdated, socketStatus, refresh, updateTaskStatus } =
     useTaskGraph(selectedId || null);
+
+  const handleStatusChange = useCallback((taskId: string, status: TaskStatus) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!isAdmin && task?.ownerId !== user?.uid) {
+      setAdminToast(true);
+      return;
+    }
+    updateTaskStatus(taskId, status);
+  }, [isAdmin, user, tasks, updateTaskStatus]);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -177,7 +189,7 @@ export default function GraphPage() {
               <p className="text-xs text-gray-600">Generate a plan from the home page.</p>
             </div>
           ) : (
-            <TaskGraph nodes={nodes} edges={edges} tasks={tasks} onStatusChange={updateTaskStatus} />
+            <TaskGraph nodes={nodes} edges={edges} tasks={tasks} onStatusChange={handleStatusChange} />
           )}
         </div>
 
@@ -196,6 +208,12 @@ export default function GraphPage() {
         )}
         </AnimatePresence>
       </div>
+
+      <AdminOnlyToast
+        show={adminToast}
+        onClose={() => setAdminToast(false)}
+        message="You can only update status on your own tasks."
+      />
     </div>
   );
 }
