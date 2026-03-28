@@ -20,4 +20,10 @@ node_modules/
 
 # OS
 .DS_Store
-Thumbbs.db
+Thumbs.db
+
+# Local DB and logs
+*.db
+*.db-shm
+*.db-wal
+apps/logs/
