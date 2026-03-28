@@ -23,6 +23,7 @@ from src.modules.files.files_service import router as files_router
 from src.modules.cicd.cicd_service import router as cicd_router
 from src.modules.observability.observability_service import router as observe_router
 from src.modules.admin.admin_service import router as admin_router
+from src.modules.dev.dev_service import router as dev_router
 from src.queue.queue import task_queue
 
 import src.queue.worker  # noqa: F401 — registers the job handler as a side effect
@@ -75,6 +76,7 @@ app.include_router(files_router,    prefix="/api/files")
 app.include_router(cicd_router,     prefix="/api/cicd")
 app.include_router(observe_router,  prefix="/api/observe")
 app.include_router(admin_router,    prefix="/api/admin")
+app.include_router(dev_router,      prefix="/api/dev")
 
 
 @app.get("/health")

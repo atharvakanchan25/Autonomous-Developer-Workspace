@@ -141,4 +141,21 @@ export const api = {
       request<Deployment[]>(`/api/cicd/deployments?projectId=${projectId}`),
     get: (id: string) => request<Deployment>(`/api/cicd/deployments/${id}`),
   },
+  dev: {
+    chat: (data: {
+      instruction: string;
+      fileContent: string;
+      filePath: string;
+      language: string;
+      projectId: string;
+      conversationHistory: { role: string; content: string }[];
+    }) => request<{ explanation: string; editedCode: string; changes: string[] }>(
+      "/api/dev/chat", { method: "POST", body: JSON.stringify(data) }
+    ),
+    apply: (fileId: string, newContent: string) =>
+      request<ProjectFile>("/api/dev/apply", {
+        method: "POST",
+        body: JSON.stringify({ fileId, newContent }),
+      }),
+  },
 };
