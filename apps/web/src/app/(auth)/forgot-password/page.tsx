@@ -4,9 +4,26 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { duration, ease, buttonTap, fadeUp } from "@/lib/motion";
+import { auth, sendPasswordResetEmail } from "@/lib/firebase";
+import { FirebaseError } from "firebase/app";
 
 function Spinner() {
   return <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />;
+}
+
+function parseFirebaseError(err: unknown): string {
+  if (err instanceof FirebaseError) {
+    switch (err.code) {
+      case "auth/user-not-found":
+      case "auth/invalid-email":
+        return "No account found with this email address.";
+      case "auth/too-many-requests":
+        return "Too many attempts. Please try again later.";
+      default:
+        return "Something went wrong. Please try again.";
+    }
+  }
+  return "Something went wrong. Please try again.";
 }
 
 export default function ForgotPasswordPage() {
@@ -28,11 +45,10 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
     try {
-      // TODO: wire up real password reset
-      await new Promise((r) => setTimeout(r, 1400));
+      await sendPasswordResetEmail(auth, email);
       setSent(true);
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err) {
+      setError(parseFirebaseError(err));
     } finally {
       setLoading(false);
     }
@@ -117,7 +133,7 @@ export default function ForgotPasswordPage() {
             type="submit" disabled={loading}
             className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             whileTap={!loading ? buttonTap : {}}
-            transition={{ duration: duration.fast }}
+            transition={{ duration: duration.standard, ease: ease.enter }}
           >
             {loading ? <><Spinner />Sending…</> : "Send reset link"}
           </motion.button>
