@@ -1,8 +1,4 @@
-import json
-import re
-import asyncio
-
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.lib.groq import groq_client
@@ -10,7 +6,12 @@ from src.lib.firestore import db
 from src.lib.errors import not_found, bad_request
 from src.lib.logger import logger
 from src.lib.utils import now_iso
+from src.lib.auth import AuthUser, get_current_user
 from src.queue.queue import task_queue, JobData
+
+import json
+import re
+import asyncio
 
 router = APIRouter()
 
@@ -69,7 +70,7 @@ _FEW_SHOT_EXAMPLE = {
 }
 
 
-async def _call_llm(description: str) -> str:
+async def _call_llm(description: str) -> tuple[str, int]:
     response = await groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
@@ -84,7 +85,8 @@ async def _call_llm(description: str) -> str:
     content = response.choices[0].message.content or ""
     if not content:
         raise bad_request("LLM returned an empty response")
-    return content
+    tokens_used = response.usage.total_tokens if response.usage else 0
+    return content, tokens_used
 
 
 def _parse_response(raw: str) -> dict:
@@ -102,13 +104,22 @@ class GeneratePlanRequest(BaseModel):
 
 
 @router.post("/generate-plan", status_code=201)
-async def generate_plan(body: GeneratePlanRequest):
+async def generate_plan(body: GeneratePlanRequest, user: AuthUser = Depends(get_current_user)):
+    """Generate AI task plan for a project."""
     project_doc = db.collection("projects").document(body.projectId).get()
     if not project_doc.exists:
         raise not_found("Project")
-    project = {"id": project_doc.id, **project_doc.to_dict()}
+    
+    project_data = project_doc.to_dict()
+    
+    # Check access: admin can generate for any project, users only for their own
+    if not user.can_access_resource(project_data.get("ownerId")):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = {"id": project_doc.id, **project_data}
 
-    raw = await _call_llm(body.description)
+    raw, tokens_used = await _call_llm(body.description)
     data = _parse_response(raw)
     language = data.get("language", "python")
     framework = data.get("framework", "")
@@ -126,6 +137,8 @@ async def generate_plan(body: GeneratePlanRequest):
             "order": t["order"],
             "status": "PENDING",
             "projectId": body.projectId,
+            "ownerId": user.uid,
+            "assignedTo": user.uid,
             "dependsOn": [key_to_id[dep] for dep in t.get("dependsOn", [])],
             "createdAt": now,
             "updatedAt": now,
@@ -135,7 +148,9 @@ async def generate_plan(body: GeneratePlanRequest):
     batch.set(log_ref, {
         "projectId": body.projectId, "prompt": body.description,
         "rawResponse": raw, "taskCount": len(tasks), "language": language,
-        "framework": framework, "createdAt": now,
+        "framework": framework, "userId": user.uid, "userRole": user.role,
+        "tokensUsed": tokens_used,
+        "createdAt": now,
     })
     
     # Update project with detected language
@@ -155,6 +170,8 @@ async def generate_plan(body: GeneratePlanRequest):
             "order": t["order"],
             "status": "PENDING",
             "projectId": body.projectId,
+            "ownerId": user.uid,
+            "assignedTo": user.uid,
             "dependsOn": [
                 {"id": key_to_id[dep], "title": next(x["title"] for x in tasks if x["key"] == dep)}
                 for dep in t.get("dependsOn", [])

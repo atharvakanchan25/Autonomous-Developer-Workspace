@@ -4,6 +4,9 @@ export interface Project {
   id: string;
   name: string;
   description?: string | null;
+  ownerId?: string;
+  language?: string;
+  framework?: string;
   createdAt: string;
   updatedAt: string;
   _count?: { tasks: number };
@@ -21,6 +24,8 @@ export interface Task {
   status: TaskStatus;
   order: number;
   projectId: string;
+  ownerId?: string;
+  assignedTo?: string;
   project?: { id: string; name: string };
   dependsOn?: TaskDep[];
   createdAt: string;
@@ -37,6 +42,7 @@ export interface CreateTaskPayload {
   description?: string;
   projectId: string;
   status?: TaskStatus;
+  assignedTo?: string;
 }
 
 export interface DagNode {

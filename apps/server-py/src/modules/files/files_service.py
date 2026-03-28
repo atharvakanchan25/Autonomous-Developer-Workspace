@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import io
 import zipfile
-import os
 
 from src.lib.firestore import db
 from src.lib.errors import not_found, bad_request
 from src.lib.utils import now_iso
+from src.lib.auth import AuthUser, get_current_user, log_action
 
 router = APIRouter()
 MAX_VERSIONS = 50
@@ -49,10 +49,25 @@ class RenameFileRequest(BaseModel):
     name: str
 
 
+def _check_project_access(project_id: str, user: AuthUser):
+    """Verify user has access to the project."""
+    if user.is_admin():
+        return
+    
+    doc = db.collection("projects").document(project_id).get()
+    if doc.exists and doc.to_dict().get("ownerId") == user.uid:
+        return
+    
+    raise HTTPException(status_code=403, detail="Access denied")
+
+
 @router.get("/")
-def list_files(projectId: str = Query(...)):
+async def list_files(projectId: str = Query(...), user: AuthUser = Depends(get_current_user)):
+    """List all files in a project."""
     if not db.collection("projects").document(projectId).get().exists:
         raise not_found("Project")
+    
+    _check_project_access(projectId, user)
     snap = (
         db.collection("projectFiles")
         .where("projectId", "==", projectId)
@@ -63,7 +78,8 @@ def list_files(projectId: str = Query(...)):
 
 
 @router.get("/versions/{version_id}")
-def get_version(version_id: str):
+def get_version(version_id: str, user: AuthUser = Depends(get_current_user)):
+    """Get a specific file version."""
     doc = db.collection("fileVersions").document(version_id).get()
     if not doc.exists:
         raise not_found("FileVersion")
@@ -71,7 +87,8 @@ def get_version(version_id: str):
 
 
 @router.get("/{file_id}")
-def get_file(file_id: str):
+def get_file(file_id: str, user: AuthUser = Depends(get_current_user)):
+    """Get file content."""
     doc = db.collection("projectFiles").document(file_id).get()
     if not doc.exists:
         raise not_found("File")
@@ -79,9 +96,12 @@ def get_file(file_id: str):
 
 
 @router.post("/", status_code=201)
-def create_file(body: CreateFileRequest):
+async def create_file(body: CreateFileRequest, user: AuthUser = Depends(get_current_user)):
+    """Create a new file."""
     if not db.collection("projects").document(body.projectId).get().exists:
         raise not_found("Project")
+    
+    _check_project_access(body.projectId, user)
     existing = list(
         db.collection("projectFiles")
         .where("projectId", "==", body.projectId)
@@ -105,7 +125,8 @@ def create_file(body: CreateFileRequest):
 
 
 @router.put("/{file_id}")
-def update_file(file_id: str, body: UpdateFileRequest):
+def update_file(file_id: str, body: UpdateFileRequest, user: AuthUser = Depends(get_current_user)):
+    """Update file content."""
     doc = db.collection("projectFiles").document(file_id).get()
     if not doc.exists:
         raise not_found("File")
@@ -131,7 +152,8 @@ def update_file(file_id: str, body: UpdateFileRequest):
 
 
 @router.patch("/{file_id}/rename")
-def rename_file(file_id: str, body: RenameFileRequest):
+def rename_file(file_id: str, body: RenameFileRequest, user: AuthUser = Depends(get_current_user)):
+    """Rename a file."""
     doc = db.collection("projectFiles").document(file_id).get()
     if not doc.exists:
         raise not_found("File")
@@ -154,7 +176,8 @@ def rename_file(file_id: str, body: RenameFileRequest):
 
 
 @router.delete("/{file_id}", status_code=204)
-def delete_file(file_id: str):
+def delete_file(file_id: str, user: AuthUser = Depends(get_current_user)):
+    """Delete a file."""
     doc = db.collection("projectFiles").document(file_id).get()
     if not doc.exists:
         raise not_found("File")
@@ -162,7 +185,8 @@ def delete_file(file_id: str):
 
 
 @router.get("/{file_id}/versions")
-def list_versions(file_id: str):
+def list_versions(file_id: str, user: AuthUser = Depends(get_current_user)):
+    """List all versions of a file."""
     if not db.collection("projectFiles").document(file_id).get().exists:
         raise not_found("File")
     snap = (
@@ -175,11 +199,13 @@ def list_versions(file_id: str):
 
 
 @router.get("/download/{project_id}")
-def download_project(project_id: str):
-    """Download entire project as a zip file with proper directory structure."""
+async def download_project(project_id: str, user: AuthUser = Depends(get_current_user)):
+    """Download entire project as a zip file."""
     project_doc = db.collection("projects").document(project_id).get()
     if not project_doc.exists:
         raise not_found("Project")
+    
+    _check_project_access(project_id, user)
     
     project = project_doc.to_dict()
     project_name = project.get("name", "project").replace(" ", "_").replace("/", "_")
@@ -281,7 +307,8 @@ Thumbs.db
 
 
 @router.post("/{file_id}/versions/{version_id}/restore")
-def restore_version(file_id: str, version_id: str):
+def restore_version(file_id: str, version_id: str, user: AuthUser = Depends(get_current_user)):
+    """Restore a file to a previous version."""
     file_doc = db.collection("projectFiles").document(file_id).get()
     if not file_doc.exists:
         raise not_found("File")

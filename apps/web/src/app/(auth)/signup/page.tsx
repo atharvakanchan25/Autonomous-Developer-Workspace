@@ -193,7 +193,8 @@ export default function SignupPage() {
     try {
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(user, { displayName: name.trim() });
-      router.push("/home");
+      await auth.signOut();
+      router.push("/login");
     } catch (err) {
       setErrors({ form: parseFirebaseError(err) });
     } finally {
