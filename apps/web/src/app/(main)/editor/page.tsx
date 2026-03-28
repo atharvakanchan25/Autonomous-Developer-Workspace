@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useFileTree } from "@/lib/useFileTree";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { EditorPane } from "@/components/editor/EditorPane";
+import { LivePreview } from "@/components/editor/LivePreview";
 import { RenameModal } from "@/components/editor/RenameModal";
 import { ProjectSelect } from "@/components/ProjectSelect";
 import type { ProjectFile } from "@/types";
@@ -21,6 +22,8 @@ export default function EditorPage() {
 
   const { tree, loading, refresh, addFile, updateFile, removeFile } =
     useFileTree(selectedProjectId || null);
+
+  const allFiles = tree;
 
   function handleProjectChange(id: string) {
     setSelectedProjectId(id);
@@ -95,12 +98,21 @@ export default function EditorPage() {
           className="border-white/10 bg-[#3C3C3C] text-gray-300 text-xs focus:border-indigo-500"
         />
         {selectedProjectId && (
-          <button
-            onClick={refresh}
-            className="rounded border border-white/10 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
-          >
-            ↺
-          </button>
+          <>
+            <button
+              onClick={refresh}
+              className="rounded border border-white/10 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
+            >
+              ↺
+            </button>
+            <button
+              onClick={() => api.files.download(selectedProjectId)}
+              className="rounded border border-indigo-500/50 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300"
+              title="Download project as ZIP"
+            >
+              ⬇ Download Project
+            </button>
+          </>
         )}
         {activeFile && (
           <span className="ml-2 text-xs text-gray-500">
@@ -136,6 +148,11 @@ export default function EditorPage() {
         {/* Editor */}
         <div className="flex-1 overflow-hidden">
           <EditorPane file={activeFile} onSaved={handleSaved} />
+        </div>
+        
+        {/* Live Preview */}
+        <div className="w-96 shrink-0 border-l border-white/10 bg-[#1E1E1E]">
+          <LivePreview file={activeFile} projectId={selectedProjectId} allFiles={allFiles} />
         </div>
       </div>
 

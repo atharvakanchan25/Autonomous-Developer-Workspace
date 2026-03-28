@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
+import { useProjectStore } from "@/lib/useProjectStore";
 import type { Project, Task, TaskStatus } from "@/types";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageShell } from "@/components/PageShell";
@@ -15,6 +16,7 @@ export default function TasksPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const projectIdParam = searchParams.get("projectId") ?? "";
+  const { projectId: storedId, setProjectId } = useProjectStore();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -44,6 +46,7 @@ export default function TasksPage() {
 
   function handleProjectFilter(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value;
+    setProjectId(val);
     const params = new URLSearchParams(searchParams.toString());
     if (val) params.set("projectId", val);
     else params.delete("projectId");

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useSocket } from "@/lib/useSocket";
+import { useProjectStore } from "@/lib/useProjectStore";
 import { DeploymentCard } from "@/components/cicd/DeploymentCard";
 import { ProjectSelect } from "@/components/ProjectSelect";
 import type { Deployment } from "@/types";
@@ -16,7 +17,9 @@ export default function DeployPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [selectedId, setSelectedId] = useState(searchParams.get("projectId") ?? "");
+  const { projectId: storedId, setProjectId } = useProjectStore();
+  const urlId = searchParams.get("projectId") ?? "";
+  const [selectedId, setSelectedId] = useState(urlId || storedId);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
@@ -35,6 +38,7 @@ export default function DeployPage() {
 
   function handleProjectChange(id: string) {
     setSelectedId(id);
+    setProjectId(id);
     const p = new URLSearchParams();
     if (id) p.set("projectId", id);
     router.replace(`/deploy?${p.toString()}`);

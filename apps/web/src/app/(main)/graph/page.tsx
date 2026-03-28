@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useTaskGraph } from "@/lib/useTaskGraph";
+import { useProjectStore } from "@/lib/useProjectStore";
 import type { TaskStatus } from "@/types";
 import { AgentLogFeed } from "@/components/AgentLogFeed";
 import { ProjectSelect } from "@/components/ProjectSelect";
@@ -32,9 +33,17 @@ const LEGEND: { status: TaskStatus; label: string }[] = [
 export default function GraphPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { projectId: storedId, setProjectId } = useProjectStore();
 
-  const [selectedId, setSelectedId] = useState<string>(searchParams.get("projectId") ?? "");
+  // URL param takes priority on first load, then fall back to stored
+  const urlId = searchParams.get("projectId") ?? "";
+  const [selectedId, setSelectedId] = useState<string>(urlId || storedId);
   const [showLogs, setShowLogs] = useState(true);
+
+  // Sync URL → store on mount if URL has an id
+  useEffect(() => {
+    if (urlId && urlId !== storedId) setProjectId(urlId);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { nodes, edges, tasks, loading, error, lastUpdated, socketStatus, refresh, updateTaskStatus } =
     useTaskGraph(selectedId || null);
@@ -42,11 +51,12 @@ export default function GraphPage() {
   const handleSelect = useCallback(
     (id: string) => {
       setSelectedId(id);
+      setProjectId(id);
       const p = new URLSearchParams();
       if (id) p.set("projectId", id);
       router.replace(`/graph?${p.toString()}`);
     },
-    [router],
+    [router, setProjectId],
   );
 
   const completedCount = tasks.filter((t) => t.status === "COMPLETED").length;

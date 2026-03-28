@@ -14,6 +14,7 @@ from src.lib.config import config
 from src.lib.logger import logger
 from src.lib.firestore import db
 from src.lib.socket import sio
+from src.lib.mcp_server import mcp
 from src.agents.agent_service import bootstrap_agents, router as agents_router
 from src.modules.projects.projects_service import router as projects_router
 from src.modules.tasks.tasks_service import router as tasks_router
@@ -70,8 +71,8 @@ async def health():
     try:
         list(db.collection("_health").limit(1).stream())
         db_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Health check DB error: {e}")
     return JSONResponse(
         status_code=200 if db_ok else 503,
         content={
@@ -86,6 +87,9 @@ async def health():
 async def not_found_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=404, content={"error": "Route not found"})
 
+
+# ── Mount MCP ────────────────────────────────────────────────────────────────
+app.mount("/mcp", mcp.streamable_http_app())
 
 # ── Mount Socket.IO ───────────────────────────────────────────────────────────
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)

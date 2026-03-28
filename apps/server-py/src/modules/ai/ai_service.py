@@ -20,6 +20,8 @@ You MUST respond with ONLY a valid JSON object — no markdown, no explanation, 
 
 The JSON must conform exactly to this structure:
 {
+  "language": "string (primary programming language: python, javascript, typescript, java, go, rust, etc.)",
+  "framework": "string (optional framework/library if mentioned)",
   "tasks": [
     {
       "key": "string (short unique snake_case identifier)",
@@ -32,6 +34,7 @@ The JSON must conform exactly to this structure:
 }
 
 Rules:
+- Detect the primary programming language from the project description. If not specified, choose the most appropriate one.
 - Generate between 4 and 12 tasks.
 - Every key must be unique, lowercase, snake_case, max 40 chars.
 - dependsOn must only reference keys defined in the same tasks array.
@@ -42,7 +45,7 @@ _FEW_SHOT_EXAMPLE = {
     "role": "user",
     "content": (
         "Project description: Build a simple REST API for a blog with posts and comments\n\n"
-        + json.dumps({"tasks": [
+        + json.dumps({"language": "python", "framework": "FastAPI", "tasks": [
             {"key": "setup_project", "title": "Initialise project and install dependencies",
              "description": "Create the Python project, configure virtual environment, and install FastAPI and other core dependencies.",
              "order": 1, "dependsOn": []},
@@ -107,6 +110,8 @@ async def generate_plan(body: GeneratePlanRequest):
 
     raw = await _call_llm(body.description)
     data = _parse_response(raw)
+    language = data.get("language", "python")
+    framework = data.get("framework", "")
     tasks: list[dict] = data.get("tasks", [])
 
     now = now_iso()
@@ -129,8 +134,17 @@ async def generate_plan(body: GeneratePlanRequest):
     log_ref = db.collection("aiPlanLogs").document()
     batch.set(log_ref, {
         "projectId": body.projectId, "prompt": body.description,
-        "rawResponse": raw, "taskCount": len(tasks), "createdAt": now,
+        "rawResponse": raw, "taskCount": len(tasks), "language": language,
+        "framework": framework, "createdAt": now,
     })
+    
+    # Update project with detected language
+    db.collection("projects").document(body.projectId).update({
+        "language": language,
+        "framework": framework,
+        "updatedAt": now,
+    })
+    
     batch.commit()
 
     saved_tasks = [
@@ -171,11 +185,11 @@ async def generate_plan(body: GeneratePlanRequest):
             logger.info(f"Queued task for execution: {task_refs[i].id}")
     
     return {
-        "project": project,
+        "project": {**project, "language": language, "framework": framework},
         "tasks": saved_tasks,
         "dag": {
             "nodes": [{"key": t["key"], "title": t["title"], "order": t["order"]} for t in tasks],
             "edges": edges,
         },
-        "meta": {"taskCount": len(saved_tasks)},
+        "meta": {"taskCount": len(saved_tasks), "language": language, "framework": framework},
     }

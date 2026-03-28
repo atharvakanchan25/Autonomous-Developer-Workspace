@@ -67,17 +67,30 @@ export const api = {
       request<any>("/api/agents/run", { method: "POST", body: JSON.stringify(data) }),
   },
   observe: {
-    summary: () => request<SummaryStats>("/api/observe/summary"),
+    summary: (projectId?: string) => {
+      const qs = projectId ? `?projectId=${projectId}` : "";
+      return request<SummaryStats>(`/api/observe/summary${qs}`);
+    },
     logs: (params?: Record<string, string>) => {
       const qs = params ? "?" + new URLSearchParams(params).toString() : "";
       return request<{ logs: ObsLog[]; nextCursor: string | null }>(`/api/observe/logs${qs}`);
     },
-    agents: (limit?: number) =>
-      request<AgentRunRow[]>(`/api/observe/agents${limit ? `?limit=${limit}` : ""}`),
+    agents: (limit?: number, projectId?: string) => {
+      const params = new URLSearchParams();
+      if (limit) params.set("limit", limit.toString());
+      if (projectId) params.set("projectId", projectId);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      return request<AgentRunRow[]>(`/api/observe/agents${qs}`);
+    },
     timeline: (projectId?: string) =>
       request<TimelineRow[]>(`/api/observe/timeline${projectId ? `?projectId=${projectId}` : ""}`),
-    errors: (limit?: number) =>
-      request<ObsLog[]>(`/api/observe/errors${limit ? `?limit=${limit}` : ""}`),
+    errors: (limit?: number, projectId?: string) => {
+      const params = new URLSearchParams();
+      if (limit) params.set("limit", limit.toString());
+      if (projectId) params.set("projectId", projectId);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      return request<ObsLog[]>(`/api/observe/errors${qs}`);
+    },
   },
   files: {
     list: (projectId: string) =>
@@ -97,6 +110,10 @@ export const api = {
       request<FileVersion>(`/api/files/versions/${versionId}`),
     restoreVersion: (id: string, versionId: string) =>
       request<ProjectFile>(`/api/files/${id}/versions/${versionId}/restore`, { method: "POST" }),
+    download: (projectId: string) => {
+      // Direct download - returns blob
+      window.open(`${BASE}/api/files/download/${projectId}`, '_blank');
+    },
   },
   cicd: {
     trigger: (projectId: string, taskId?: string) =>

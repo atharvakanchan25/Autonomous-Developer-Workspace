@@ -105,12 +105,12 @@ export function TaskGraph({ nodes: initialNodes, edges: initialEdges, tasks, onS
   const miniMapNodeColor = useCallback((node: Node) => {
     const task = (node.data as { task: Task }).task;
     const map: Record<TaskStatus, string> = {
-      PENDING:     "#e5e7eb",
+      PENDING:     "#4b5563",
       IN_PROGRESS: "#6366f1",
-      COMPLETED:   "#22c55e",
+      COMPLETED:   "#10b981",
       FAILED:      "#ef4444",
     };
-    return map[task.status] ?? "#e5e7eb";
+    return map[task.status] ?? "#4b5563";
   }, []);
 
   return (
@@ -123,9 +123,9 @@ export function TaskGraph({ nodes: initialNodes, edges: initialEdges, tasks, onS
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+        fitViewOptions={{ padding: 0.15, maxZoom: 1, minZoom: 0.4 }}
         minZoom={0.3}
-        maxZoom={1.5}
+        maxZoom={1.2}
         proOptions={{ hideAttribution: true }}
         onPaneClick={() => {
           setSelectedNodeId(null);
@@ -134,10 +134,10 @@ export function TaskGraph({ nodes: initialNodes, edges: initialEdges, tasks, onS
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color="#374151"
-          style={{ backgroundColor: "#0f1419" }}
+          gap={32}
+          size={2}
+          color="#1f2937"
+          style={{ backgroundColor: "#0a0e14" }}
         />
         <Controls
           showInteractive={false}

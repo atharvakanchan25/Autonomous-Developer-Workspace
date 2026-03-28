@@ -7,6 +7,7 @@ from src.lib.logger import logger
 from src.lib.errors import not_found
 from src.lib.utils import now_iso
 from src.lib import emitter
+from src.lib.cache import task_cache
 from src.lib.socket_events import AgentLogPayload, PipelineStagePayload, TaskUpdatedPayload
 from src.agents.agent_registry import get_agent
 from src.agents.agent_types import AgentType, AgentRunStatus, AgentContext, AgentResult
@@ -68,6 +69,18 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
                 })
 
 
+def _get_task(task_id: str) -> dict:
+    cached = task_cache.get(task_id)
+    if cached:
+        return cached
+    task_doc = db.collection("tasks").document(task_id).get()
+    if not task_doc.exists:
+        raise not_found("Task")
+    data = {"id": task_doc.id, **task_doc.to_dict()}
+    task_cache.set(task_id, data)
+    return data
+
+
 async def dispatch_agent(
     task_id: str,
     agent_type: AgentType,
@@ -75,10 +88,7 @@ async def dispatch_agent(
 ) -> DispatchResult:
     previous_outputs = previous_outputs or {}
 
-    task_doc = db.collection("tasks").document(task_id).get()
-    if not task_doc.exists:
-        raise not_found("Task")
-    task = {"id": task_doc.id, **task_doc.to_dict()}
+    task = _get_task(task_id)
     project_id: str = task["projectId"]
 
     ctx = AgentContext(
@@ -142,6 +152,7 @@ async def dispatch_agent(
     except Exception as err:
         duration_ms = int((time.monotonic() - started_at) * 1000)
         error_msg = str(err)
+        logger.error(f"Agent failed: run={run_ref.id} error={error_msg}", exc_info=True)
         run_ref.update({
             "status": AgentRunStatus.FAILED.value,
             "errorMsg": error_msg,
@@ -158,7 +169,6 @@ async def dispatch_agent(
             agentType=agent_type.value, level="error",
             message=f"Agent {agent_type.value} failed: {error_msg}", timestamp=ts,
         ))
-        logger.error(f"Agent failed: run={run_ref.id} error={error_msg}")
 
         return DispatchResult(
             agentRunId=run_ref.id, taskId=task_id, agentType=agent_type,
@@ -167,14 +177,13 @@ async def dispatch_agent(
 
 
 async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
-    task_doc = db.collection("tasks").document(task_id).get()
-    if not task_doc.exists:
-        raise not_found("Task")
-    task = {"id": task_doc.id, **task_doc.to_dict()}
+    task = _get_task(task_id)
     project_id: str = task["projectId"]
 
     ts = now_iso()
     db.collection("tasks").document(task_id).update({"status": "IN_PROGRESS", "updatedAt": ts})
+    task_cache.delete(task_id)  # invalidate so next read gets fresh status
+
     await emitter.emit_task_updated(TaskUpdatedPayload(
         taskId=task_id, projectId=project_id, status="IN_PROGRESS",
         title=task["title"], updatedAt=ts,
@@ -196,6 +205,7 @@ async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
         if result.status == "FAILED":
             ts = now_iso()
             db.collection("tasks").document(task_id).update({"status": "FAILED", "updatedAt": ts})
+            task_cache.delete(task_id)
             await emitter.emit_task_updated(TaskUpdatedPayload(
                 taskId=task_id, projectId=project_id, status="FAILED",
                 title=task["title"], updatedAt=ts,
@@ -208,6 +218,8 @@ async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
 
     ts = now_iso()
     db.collection("tasks").document(task_id).update({"status": "COMPLETED", "updatedAt": ts})
+    task_cache.delete(task_id)
+
     await emitter.emit_task_updated(TaskUpdatedPayload(
         taskId=task_id, projectId=project_id, status="COMPLETED",
         title=task["title"], updatedAt=ts,
@@ -222,7 +234,7 @@ async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
     try:
         await _persist_artifacts(project_id, results)
     except Exception as err:
-        logger.error(f"Failed to persist artifacts: {err}")
+        logger.error(f"Failed to persist artifacts: {err}", exc_info=True)
 
     logger.info(f"Pipeline completed: task={task_id} stages={len(results)}")
     return results
