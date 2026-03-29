@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { duration, ease } from "@/lib/motion";
 import { auth, signOut } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { useAuth } from "@/lib/useAuth";
 
@@ -294,17 +293,11 @@ function AccountPopover({ user, role, onClose, onLogout }: {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
-  const footerRef = useRef<HTMLDivElement>(null);
-  const { hasRole, user: authUser, loading: authLoading } = useAuth();
+  const { hasRole, user, loading: authLoading } = useAuth();
 
-  const isAdmin = authUser?.role === "admin";
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, setUser);
-    return () => unsub();
-  }, []);
+  const isAdmin = user?.role === "admin";
+  const role = user?.role ?? "user";
 
   async function handleLogout() {
     setOpen(false);
@@ -336,7 +329,8 @@ export function Sidebar() {
         <ul className="space-y-0.5">
           {NAV.map(({ href, label, icon, ...item }) => {
             const isAdminOnly = (item as any).adminOnly;
-            if (isAdminOnly && (authLoading || !hasRole("admin"))) return null;
+            // Show admin link only when auth is loaded and user is admin
+            if (isAdminOnly && !isAdmin) return null;
 
             const active = pathname === href || (href !== "/home" && pathname.startsWith(href));
             return (
@@ -359,12 +353,12 @@ export function Sidebar() {
       </nav>
 
       {/* Account footer */}
-      <div ref={footerRef} className="relative border-t border-gray-700 px-3 py-3">
+      <div className="relative border-t border-gray-700 px-3 py-3">
         <AnimatePresence>
-          {open && user && authUser && (
+          {open && user && (
             <AccountPopover
               user={user}
-              role={authUser.role}
+              role={role}
               onClose={() => setOpen(false)}
               onLogout={handleLogout}
             />

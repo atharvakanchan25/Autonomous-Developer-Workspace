@@ -3,16 +3,17 @@ from pydantic import BaseModel
 from typing import Optional
 
 from src.agents.agent_registry import register_agent, list_agents
-from src.agents.agent_dispatcher import dispatch_agent, dispatch_pipeline
+from src.agents.agent_dispatcher import dispatch_agent
+from src.agents.langgraph_pipeline import run_langgraph_pipeline
 from src.agents.agent_types import AgentType
 from src.agents.runners.code_generator import CodeGeneratorAgent
 from src.agents.runners.test_generator import TestGeneratorAgent
 from src.agents.runners.code_reviewer import CodeReviewerAgent
 from src.agents.runners.scaffold_agent import ScaffoldAgent
-from src.lib.firestore import db
-from src.lib.errors import not_found, bad_request
-from src.lib.logger import logger
-from src.lib.auth import AuthUser, get_current_user
+from src.core.database import db
+from src.core.errors import not_found, bad_request
+from src.core.logger import logger
+from src.auth.auth import AuthUser, get_current_user
 
 router = APIRouter()
 
@@ -35,28 +36,28 @@ class RunAgentRequest(BaseModel):
 async def run_agent(body: RunAgentRequest, user: AuthUser = Depends(get_current_user)):
     """Run AI agent(s) for a task."""
     if body.pipeline:
-        results = await dispatch_pipeline(body.taskId)
+        results = await run_langgraph_pipeline(body.taskId)
         return [
             {
                 "agentRunId": r.agentRunId,
                 "taskId": r.taskId,
                 "agentType": r.agentType,
                 "status": r.status,
-                "durationMs": r.durationMs
+                "durationMs": r.durationMs,
             }
             for r in results
         ]
-    
+
     if not body.agentType:
         raise bad_request("agentType is required when pipeline is false")
-    
+
     result = await dispatch_agent(body.taskId, body.agentType)
     return {
         "agentRunId": result.agentRunId,
         "taskId": result.taskId,
         "agentType": result.agentType,
         "status": result.status,
-        "durationMs": result.durationMs
+        "durationMs": result.durationMs,
     }
 
 
@@ -66,7 +67,7 @@ async def list_agent_runs(task_id: str, user: AuthUser = Depends(get_current_use
     task_doc = db.collection("tasks").document(task_id).get()
     if not task_doc.exists:
         raise not_found("Task")
-    
+
     runs = db.collection("agentRuns").where("taskId", "==", task_id).order_by("createdAt").stream()
     return [{"id": d.id, **d.to_dict()} for d in runs]
 

@@ -158,4 +158,7 @@ export const api = {
         body: JSON.stringify({ fileId, newContent }),
       }),
   },
+  admin: {
+    projects: () => request<Array<Project & { ownerEmail: string }>>("/api/admin/projects"),
+  },
 };

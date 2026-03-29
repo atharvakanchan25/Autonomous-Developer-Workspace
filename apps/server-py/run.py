@@ -1,5 +1,5 @@
 import uvicorn
-from src.lib.config import config
+from src.core.config import config
 
 if __name__ == "__main__":
     uvicorn.run(

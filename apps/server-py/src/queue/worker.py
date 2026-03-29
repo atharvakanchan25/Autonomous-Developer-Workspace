@@ -2,10 +2,10 @@ import asyncio
 import time
 
 from src.queue.queue import task_queue, Job, JobData
-from src.lib.firestore import db
-from src.lib.logger import logger
-from src.lib.utils import now_iso
-from src.agents.agent_dispatcher import dispatch_pipeline
+from src.core.database import db
+from src.core.logger import logger
+from src.core.utils import now_iso
+from src.agents.langgraph_pipeline import run_langgraph_pipeline
 from src.modules.cicd.cicd_service import run_cicd_pipeline
 
 
@@ -58,7 +58,7 @@ async def _process_job(job: Job) -> None:
 
     db.collection("tasks").document(task_id).update({"status": "IN_PROGRESS", "updatedAt": now_iso()})
 
-    pipeline_results = await dispatch_pipeline(task_id)
+    pipeline_results = await run_langgraph_pipeline(task_id)
     all_passed = all(r.status == "COMPLETED" for r in pipeline_results)
 
     if all_passed:

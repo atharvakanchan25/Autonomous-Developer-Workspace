@@ -1,7 +1,6 @@
 """
-Lightweight in-memory LRU cache to avoid redundant Firestore reads.
-Used primarily to cache project language/framework lookups that happen
-3 times per task (once per agent).
+Lightweight in-memory LRU cache to avoid redundant DB reads.
+Used to cache project/task lookups that happen 3x per task (once per agent).
 """
 from collections import OrderedDict
 from threading import Lock
@@ -40,6 +39,5 @@ class LRUCache:
             self._cache.clear()
 
 
-# Shared cache instances
-project_cache = LRUCache(maxsize=128)   # project docs keyed by project_id
-task_cache = LRUCache(maxsize=512)      # task docs keyed by task_id
+project_cache = LRUCache(maxsize=128)
+task_cache = LRUCache(maxsize=512)

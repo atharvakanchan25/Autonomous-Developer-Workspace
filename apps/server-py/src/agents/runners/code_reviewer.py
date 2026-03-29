@@ -6,7 +6,7 @@ from src.agents.agent_llm import call_llm, LlmMessage
 class CodeReviewerAgent:
     type = AgentType.CODE_REVIEWER
     display_name = "Code Reviewer"
-    description = "Reviews generated code and tests, returns structured review (embedded in README by scaffold)."
+    description = "Reviews generated code and tests; review is embedded in README by scaffold agent."
 
     async def run(self, ctx: AgentContext) -> AgentResult:
         language = ctx.language
@@ -47,14 +47,12 @@ class CodeReviewerAgent:
         score_match = re.search(r"Score:\s*(\d+)/10", result.content, re.IGNORECASE)
         score = f"{score_match.group(1)}/10" if score_match else "N/A"
 
-        # No file written — review is stored as an in-memory artifact
-        # The scaffold agent reads all review artifacts and embeds them in README.md
         return AgentResult(
             agentType=self.type,
             summary=f'Code review for "{ctx.taskTitle}" — Score: {score}',
             artifacts=[Artifact(
                 type="review",
-                filename="",          # empty = do not persist as a file
+                filename="",        # empty = in-memory only; scaffold embeds it in README
                 content=result.content,
                 language="markdown",
             )],

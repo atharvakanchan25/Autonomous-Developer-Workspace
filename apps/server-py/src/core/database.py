@@ -32,8 +32,6 @@ def _get_conn() -> sqlite3.Connection:
 _conn = _get_conn()
 
 
-# ── tiny helpers ────────────────────────────────────────────────────────────
-
 def _encode(data: dict) -> str:
     return json.dumps(data, default=str)
 
@@ -41,8 +39,6 @@ def _encode(data: dict) -> str:
 def _decode(raw: str) -> dict:
     return json.loads(raw)
 
-
-# ── DocumentReference ───────────────────────────────────────────────────────
 
 class DocumentReference:
     def __init__(self, collection: str, doc_id: str):
@@ -85,22 +81,16 @@ class DocumentReference:
         return self
 
 
-# ── DocumentSnapshot ────────────────────────────────────────────────────────
-
 class DocumentSnapshot:
     def __init__(self, doc_id: str, data: dict, exists: bool):
         self.id = doc_id
         self.exists = exists
         self._data = data
-        self.reference = DocumentReference(  # filled in by CollectionReference
-            "", doc_id
-        )
+        self.reference = DocumentReference("", doc_id)
 
     def to_dict(self) -> dict:
         return dict(self._data)
 
-
-# ── Query ───────────────────────────────────────────────────────────────────
 
 class Query:
     def __init__(self, collection: str, filters=None, order=None, limit_val=None):
@@ -132,7 +122,6 @@ class Query:
             snap.reference = DocumentReference(self._col, row["doc_id"])
             docs.append(snap)
 
-        # apply filters
         for field, op, value in self._filters:
             if op == "==":
                 docs = [d for d in docs if d.to_dict().get(field) == value]
@@ -143,7 +132,6 @@ class Query:
             elif op == ">":
                 docs = [d for d in docs if d.to_dict().get(field, "") > value]
 
-        # apply ordering
         for field, direction in reversed(self._order):
             reverse = direction == "DESCENDING"
             docs.sort(key=lambda d: d.to_dict().get(field, ""), reverse=reverse)
@@ -153,8 +141,6 @@ class Query:
 
         return docs
 
-
-# ── WriteBatch ──────────────────────────────────────────────────────────────
 
 class WriteBatch:
     def __init__(self):
@@ -196,8 +182,6 @@ class WriteBatch:
             _conn.commit()
 
 
-# ── CollectionReference ──────────────────────────────────────────────────────
-
 class CollectionReference(Query):
     def __init__(self, collection: str):
         super().__init__(collection)
@@ -213,8 +197,6 @@ class CollectionReference(Query):
         ref.set(data)
         return (None, ref)
 
-
-# ── Database (top-level client) ──────────────────────────────────────────────
 
 class _Database:
     def collection(self, name: str) -> CollectionReference:

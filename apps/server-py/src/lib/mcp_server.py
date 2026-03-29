@@ -14,9 +14,9 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from src.lib.firestore import db
-from src.lib.logger import logger
-from src.lib.cache import project_cache, task_cache
+from src.core.database import db
+from src.core.logger import logger
+from src.core.cache import project_cache, task_cache
 
 mcp = FastMCP(
     name="autonomous-developer-workspace",
@@ -29,7 +29,7 @@ mcp = FastMCP(
 )
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers (return None on miss — MCP callers check before use) ──────────────
 
 def _get_project(project_id: str) -> Optional[dict]:
     cached = project_cache.get(project_id)
@@ -60,20 +60,19 @@ def _get_task(task_id: str) -> Optional[dict]:
 @mcp.tool()
 async def run_pipeline(task_id: str) -> dict:
     """
-    Run the full 3-agent pipeline (code generator → test generator → code reviewer)
-    for a specific task. Returns a summary of each agent's result.
+    Run the full 3-agent pipeline (code → tests → review) for a task.
 
     Args:
-        task_id: The Firestore document ID of the task to run.
+        task_id: The document ID of the task to run.
     """
-    from src.agents.agent_dispatcher import dispatch_pipeline
+    from src.agents.langgraph_pipeline import run_langgraph_pipeline
 
     task = _get_task(task_id)
     if not task:
         return {"error": f"Task {task_id} not found"}
 
     logger.info(f"[MCP] run_pipeline called for task={task_id}")
-    results = await dispatch_pipeline(task_id)
+    results = await run_langgraph_pipeline(task_id)
 
     return {
         "taskId": task_id,
@@ -96,10 +95,9 @@ async def run_pipeline(task_id: str) -> dict:
 async def generate_code(task_id: str) -> dict:
     """
     Run only the Code Generator agent for a task.
-    Returns the generated code content.
 
     Args:
-        task_id: The Firestore document ID of the task.
+        task_id: The document ID of the task.
     """
     from src.agents.agent_dispatcher import dispatch_agent
     from src.agents.agent_types import AgentType
@@ -125,11 +123,10 @@ async def generate_code(task_id: str) -> dict:
 async def generate_tests(task_id: str, code: Optional[str] = None) -> dict:
     """
     Run only the Test Generator agent for a task.
-    Optionally pass existing code to test; otherwise fetches from Firestore.
 
     Args:
-        task_id: The Firestore document ID of the task.
-        code: Optional implementation code string to generate tests for.
+        task_id: The document ID of the task.
+        code: Optional implementation code to generate tests for.
     """
     from src.agents.agent_dispatcher import dispatch_agent
     from src.agents.agent_types import AgentType, AgentResult, Artifact
@@ -164,10 +161,9 @@ async def generate_tests(task_id: str, code: Optional[str] = None) -> dict:
 async def review_code(task_id: str) -> dict:
     """
     Run only the Code Reviewer agent for a task.
-    Fetches existing code and test artifacts from Firestore for the task.
 
     Args:
-        task_id: The Firestore document ID of the task.
+        task_id: The document ID of the task.
     """
     from src.agents.agent_dispatcher import dispatch_agent
     from src.agents.agent_types import AgentType, AgentResult, Artifact
@@ -176,13 +172,8 @@ async def review_code(task_id: str) -> dict:
     if not task:
         return {"error": f"Task {task_id} not found"}
 
-    # Pull latest generated files from Firestore to build previous_outputs
     project_id = task.get("projectId", "")
-    files = list(
-        db.collection("projectFiles")
-        .where("projectId", "==", project_id)
-        .stream()
-    )
+    files = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
 
     previous_outputs = {}
     base = task.get("title", "").lower().replace(" ", "_")[:50]
@@ -193,16 +184,14 @@ async def review_code(task_id: str) -> dict:
     if code_file:
         d = code_file.to_dict()
         previous_outputs[AgentType.CODE_GENERATOR] = AgentResult(
-            agentType=AgentType.CODE_GENERATOR,
-            summary="Fetched from Firestore",
+            agentType=AgentType.CODE_GENERATOR, summary="Fetched from DB",
             artifacts=[Artifact(type="code", filename=d["path"], content=d["content"], language=d.get("language", "python"))],
             rawLlmOutput=d["content"],
         )
     if test_file:
         d = test_file.to_dict()
         previous_outputs[AgentType.TEST_GENERATOR] = AgentResult(
-            agentType=AgentType.TEST_GENERATOR,
-            summary="Fetched from Firestore",
+            agentType=AgentType.TEST_GENERATOR, summary="Fetched from DB",
             artifacts=[Artifact(type="test", filename=d["path"], content=d["content"], language=d.get("language", "python"))],
             rawLlmOutput=d["content"],
         )
@@ -243,17 +232,13 @@ async def get_task_status(task_id: str) -> dict:
     Get the current status and agent run history for a task.
 
     Args:
-        task_id: The Firestore document ID of the task.
+        task_id: The document ID of the task.
     """
     task = _get_task(task_id)
     if not task:
         return {"error": f"Task {task_id} not found"}
 
-    runs = list(
-        db.collection("agentRuns")
-        .where("taskId", "==", task_id)
-        .stream()
-    )
+    runs = list(db.collection("agentRuns").where("taskId", "==", task_id).stream())
 
     return {
         "id": task_id,
@@ -275,11 +260,7 @@ async def get_task_status(task_id: str) -> dict:
 @mcp.resource("project://{project_id}/files")
 async def get_project_files(project_id: str) -> str:
     """List all generated files for a project."""
-    files = list(
-        db.collection("projectFiles")
-        .where("projectId", "==", project_id)
-        .stream()
-    )
+    files = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
     lines = [f"# Files for project {project_id}\n"]
     for f in files:
         d = f.to_dict()
@@ -310,13 +291,7 @@ async def get_task_review(task_id: str) -> str:
         return f"Task {task_id} not found"
 
     project_id = task.get("projectId", "")
-    base = task.get("title", "").lower().replace(" ", "_")[:50]
-
-    files = list(
-        db.collection("projectFiles")
-        .where("projectId", "==", project_id)
-        .stream()
-    )
+    files = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
     review = next(
         (f.to_dict().get("content", "") for f in files
          if f.to_dict().get("path", "").endswith("_review.md")),
@@ -329,15 +304,13 @@ async def get_task_review(task_id: str) -> str:
 async def get_agent_runs(project_id: str) -> str:
     """Get all agent run history for a project."""
     tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
-    task_ids = [t.id for t in tasks]
-
     lines = [f"# Agent Runs for project {project_id}\n"]
-    for task_id in task_ids:
-        runs = list(db.collection("agentRuns").where("taskId", "==", task_id).stream())
+    for task in tasks:
+        runs = list(db.collection("agentRuns").where("taskId", "==", task.id).stream())
         for r in runs:
             d = r.to_dict()
             lines.append(
-                f"- [{d.get('agentType')}] task={task_id} "
+                f"- [{d.get('agentType')}] task={task.id} "
                 f"status={d.get('status')} duration={d.get('durationMs')}ms"
             )
     return "\n".join(lines)

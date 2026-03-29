@@ -3,13 +3,13 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
-from src.lib.firestore import db
-from src.lib.logger import logger
-from src.lib.errors import not_found
-from src.lib.utils import now_iso
-from src.lib import emitter
-from src.lib.cache import task_cache, project_cache
-from src.lib.socket_events import AgentLogPayload, PipelineStagePayload, TaskUpdatedPayload
+from src.core.database import db
+from src.core.logger import logger
+from src.core.errors import not_found
+from src.core.utils import now_iso
+from src.core.cache import task_cache, project_cache
+from src.realtime import emitter
+from src.realtime.events import AgentLogPayload, PipelineStagePayload, TaskUpdatedPayload
 from src.agents.agent_registry import get_agent
 from src.agents.agent_types import AgentType, AgentRunStatus, AgentContext, AgentResult
 
@@ -21,7 +21,7 @@ class DispatchResult:
     agentRunId: str
     taskId: str
     agentType: AgentType
-    status: str  # "COMPLETED" | "FAILED"
+    status: str             # "COMPLETED" | "FAILED"
     result: Optional[AgentResult] = None
     error: Optional[str] = None
     durationMs: int = 0
@@ -32,7 +32,7 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
         if result.status != "COMPLETED" or not result.result:
             continue
         for artifact in result.result.artifacts:
-            if not artifact.filename:  # empty filename = in-memory only (e.g. reviews)
+            if not artifact.filename:
                 continue
             files_ref = db.collection("projectFiles")
             existing_docs = list(
@@ -46,7 +46,6 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
                 doc = existing_docs[0]
                 data = doc.to_dict()
                 if data.get("content"):
-                    # For review files, append instead of overwrite
                     if artifact.type == "review":
                         new_content = data["content"] + "\n\n---\n\n" + artifact.content
                     else:
@@ -200,7 +199,6 @@ async def dispatch_agent(
             agentType=agent_type.value, level="error",
             message=f"Agent {agent_type.value} failed: {error_msg}", timestamp=ts,
         ))
-
         return DispatchResult(
             agentRunId=run_ref.id, taskId=task_id, agentType=agent_type,
             status="FAILED", error=error_msg, durationMs=duration_ms,
@@ -213,7 +211,7 @@ async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
 
     ts = now_iso()
     db.collection("tasks").document(task_id).update({"status": "IN_PROGRESS", "updatedAt": ts})
-    task_cache.delete(task_id)  # invalidate so next read gets fresh status
+    task_cache.delete(task_id)
 
     await emitter.emit_task_updated(TaskUpdatedPayload(
         taskId=task_id, projectId=project_id, status="IN_PROGRESS",
@@ -267,7 +265,6 @@ async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
     except Exception as err:
         logger.error(f"Failed to persist artifacts: {err}", exc_info=True)
 
-    # Check if ALL tasks in the project are now complete — if so, run scaffold
     asyncio.create_task(_maybe_run_scaffold(project_id))
 
     logger.info(f"Pipeline completed: task={task_id} stages={len(results)}")
@@ -284,7 +281,6 @@ async def _maybe_run_scaffold(project_id: str) -> None:
         if not all(s == "COMPLETED" for s in statuses):
             return
 
-        # Check if README already exists (avoid re-running on retry)
         existing = list(
             db.collection("projectFiles")
             .where("projectId", "==", project_id)
@@ -298,21 +294,20 @@ async def _maybe_run_scaffold(project_id: str) -> None:
         logger.info(f"All tasks complete — running scaffold for project={project_id}")
         project = _get_project(project_id)
 
-        # Collect all persisted file paths AND in-memory review artifacts from agentRuns
         file_docs = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
-        all_file_paths = [d.to_dict().get("path", "") for d in file_docs]
 
-        # Fetch all completed agent runs to collect review artifacts
         run_docs = list(
             db.collection("agentRuns")
             .where("projectId", "==", project_id)
             .where("status", "==", "COMPLETED")
             .stream()
         )
+
         review_artifacts = []
         code_artifacts = []
         test_artifacts = []
         from src.agents.agent_types import Artifact, AgentResult as AR
+
         for doc in file_docs:
             data = doc.to_dict()
             path = data.get("path", "")
@@ -323,29 +318,15 @@ async def _maybe_run_scaffold(project_id: str) -> None:
             elif path.startswith("tests/") or path.startswith("spec/"):
                 test_artifacts.append(Artifact(type="test", filename=path, content=content, language=lang))
 
-        # Collect review text from observability logs
-        review_logs = list(
-            db.collection("observabilityLogs")
-            .where("projectId", "==", project_id)
-            .where("agentType", "==", "CODE_REVIEWER")
-            .stream()
-        )
-        # Get full review output from agentRuns
-        reviewer_runs = [
-            d for d in run_docs
-            if d.to_dict().get("agentType") == "CODE_REVIEWER"
-        ]
+        reviewer_runs = [d for d in run_docs if d.to_dict().get("agentType") == "CODE_REVIEWER"]
         for run in reviewer_runs:
             output = run.to_dict().get("output", "")
             if output and len(output) > 50:
                 review_artifacts.append(Artifact(type="review", filename="", content=output, language="markdown"))
 
-        synthetic_code = AR(agentType=AgentType.CODE_GENERATOR, summary="",
-                            artifacts=code_artifacts, rawLlmOutput="", tokensUsed=0)
-        synthetic_test = AR(agentType=AgentType.TEST_GENERATOR, summary="",
-                            artifacts=test_artifacts, rawLlmOutput="", tokensUsed=0)
-        synthetic_review = AR(agentType=AgentType.CODE_REVIEWER, summary="",
-                              artifacts=review_artifacts, rawLlmOutput="", tokensUsed=0)
+        synthetic_code   = AR(agentType=AgentType.CODE_GENERATOR, summary="", artifacts=code_artifacts,   rawLlmOutput="", tokensUsed=0)
+        synthetic_test   = AR(agentType=AgentType.TEST_GENERATOR,  summary="", artifacts=test_artifacts,   rawLlmOutput="", tokensUsed=0)
+        synthetic_review = AR(agentType=AgentType.CODE_REVIEWER,   summary="", artifacts=review_artifacts, rawLlmOutput="", tokensUsed=0)
 
         ctx = AgentContext(
             taskId="scaffold",
@@ -363,11 +344,9 @@ async def _maybe_run_scaffold(project_id: str) -> None:
             },
         )
 
-        from src.agents.agent_registry import get_agent
         scaffold = get_agent(AgentType.SCAFFOLD)
         result = await scaffold.run(ctx)  # type: ignore[attr-defined]
 
-        # Persist scaffold artifacts
         for artifact in result.artifacts:
             db.collection("projectFiles").add({
                 "projectId": project_id,

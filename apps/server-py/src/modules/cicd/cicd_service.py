@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from src.lib.firestore import db
-from src.lib.errors import not_found
-from src.lib import emitter
-from src.lib.socket_events import DeploymentUpdatedPayload, CicdStageLog
-from src.lib.logger import logger
-from src.lib.utils import now_iso
-from src.lib.auth import AuthUser, get_current_user, log_action
+from src.core.database import db
+from src.core.errors import not_found
+from src.core.utils import now_iso
+from src.realtime import emitter
+from src.realtime.events import DeploymentUpdatedPayload, CicdStageLog
+from src.core.logger import logger
+from src.auth.auth import AuthUser, get_current_user, log_action
 
 import asyncio
 import random
@@ -16,20 +16,14 @@ import random
 router = APIRouter()
 
 STAGES = [
-    {
-        "name": "tests", "fail_rate": 0.1, "min_ms": 1500, "max_ms": 2500,
-        "pass_detail": "All tests passed",
-        "fail_detail": "2 tests failed — assertion error in handler_test.py",
-    },
-    {
-        "name": "build", "fail_rate": 0.05, "min_ms": 2000, "max_ms": 3500,
-        "pass_detail": "Build succeeded — 0 errors, 0 warnings",
-        "fail_detail": "TypeError: unsupported operand type(s) for +: 'int' and 'str'",
-    },
-    {
-        "name": "deploy", "fail_rate": 0.0, "min_ms": 800, "max_ms": 1400,
-        "pass_detail": "", "fail_detail": "",
-    },
+    {"name": "tests",  "fail_rate": 0.1,  "min_ms": 1500, "max_ms": 2500,
+     "pass_detail": "All tests passed",
+     "fail_detail": "2 tests failed — assertion error in handler_test.py"},
+    {"name": "build",  "fail_rate": 0.05, "min_ms": 2000, "max_ms": 3500,
+     "pass_detail": "Build succeeded — 0 errors, 0 warnings",
+     "fail_detail": "TypeError: unsupported operand type(s) for +: 'int' and 'str'"},
+    {"name": "deploy", "fail_rate": 0.0,  "min_ms": 800,  "max_ms": 1400,
+     "pass_detail": "", "fail_detail": ""},
 ]
 
 
@@ -62,7 +56,6 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str]) -> None:
     for stage in STAGES:
         duration_ms = random.randint(stage["min_ms"], stage["max_ms"])
 
-        # mark stage as running
         log.append({"stage": stage["name"], "status": "running"})
         deploy_ref.update({"log": log, "updatedAt": now_iso()})
         await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
@@ -109,8 +102,6 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str]) -> None:
         ))
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
-
 class TriggerCicdRequest(BaseModel):
     projectId: str
     taskId: Optional[str] = None
@@ -122,12 +113,11 @@ async def trigger_cicd(body: TriggerCicdRequest, user: AuthUser = Depends(get_cu
     project_doc = db.collection("projects").document(body.projectId).get()
     if not project_doc.exists:
         raise not_found("Project")
-    
-    # Check access: admin can deploy any project, users only their own
+
     project_data = project_doc.to_dict()
     if not user.can_access_resource(project_data.get("ownerId")):
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     asyncio.create_task(run_cicd_pipeline(body.projectId, body.taskId))
     await log_action(user, "CICD_TRIGGER", {"projectId": body.projectId, "taskId": body.taskId})
     return {"message": "CI/CD pipeline triggered"}
@@ -139,12 +129,10 @@ async def list_deployments(projectId: str, user: AuthUser = Depends(get_current_
     project_doc = db.collection("projects").document(projectId).get()
     if not project_doc.exists:
         raise not_found("Project")
-    
-    # Check access
-    project_data = project_doc.to_dict()
-    if not user.can_access_resource(project_data.get("ownerId")):
+
+    if not user.can_access_resource(project_doc.to_dict().get("ownerId")):
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     snap = (
         db.collection("deployments")
         .where("projectId", "==", projectId)
@@ -161,16 +149,12 @@ async def get_deployment(deployment_id: str, user: AuthUser = Depends(get_curren
     doc = db.collection("deployments").document(deployment_id).get()
     if not doc.exists:
         raise not_found("Deployment")
-    
+
     deployment_data = doc.to_dict()
     project_id = deployment_data.get("projectId")
-    
-    # Check access via project ownership
     if project_id:
         project_doc = db.collection("projects").document(project_id).get()
-        if project_doc.exists:
-            project_data = project_doc.to_dict()
-            if not user.can_access_resource(project_data.get("ownerId")):
-                raise HTTPException(status_code=403, detail="Access denied")
-    
+        if project_doc.exists and not user.can_access_resource(project_doc.to_dict().get("ownerId")):
+            raise HTTPException(status_code=403, detail="Access denied")
+
     return {"id": doc.id, **deployment_data}

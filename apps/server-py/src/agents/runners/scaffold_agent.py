@@ -27,10 +27,8 @@ class ScaffoldAgent:
         language = ctx.language
         framework = ctx.framework
         framework_hint = f" with {framework}" if framework else ""
-
         deps_filename, deps_lang = DEPS_FILES.get(language, ("requirements.txt", "plaintext"))
 
-        # Collect generated source files (non-empty filename, non-review)
         code_files: list[str] = []
         test_files: list[str] = []
         review_sections: list[str] = []
@@ -49,7 +47,6 @@ class ScaffoldAgent:
         files_list = "\n".join(f"  - {f}" for f in all_files)
         reviews_block = "\n\n---\n\n".join(review_sections) if review_sections else "_No reviews available._"
 
-        # --- README ---
         readme_result = await call_llm([
             LlmMessage(role="system", content=(
                 "You are a senior software engineer writing professional project documentation.\n"
@@ -57,24 +54,17 @@ class ScaffoldAgent:
                 "Include ALL of these sections in this exact order:\n"
                 "1. # <Project Name> — tagline\n"
                 "2. ## Overview\n"
-                "3. ## Tech Stack — language, framework, key libraries with versions\n"
+                "3. ## Tech Stack\n"
                 "4. ## Project Structure — ASCII directory tree\n"
-                "5. ## Architecture — ASCII diagram of how components interact\n"
-                "6. ## Getting Started\n"
-                "   ### Prerequisites\n"
-                "   ### Installation — exact shell commands\n"
-                "   ### Configuration — env vars table if needed\n"
-                "7. ## Running the Project — exact commands\n"
-                "8. ## Running Tests — exact commands\n"
-                "9. ## Features — bullet list of what the app does\n"
-                "10. ## API Reference — endpoints/functions if applicable\n"
-                "11. ## Code Reviews\n"
-                "    (paste the reviews block here verbatim)\n"
+                "5. ## Architecture — ASCII diagram\n"
+                "6. ## Getting Started (Prerequisites, Installation, Configuration)\n"
+                "7. ## Running the Project\n"
+                "8. ## Running Tests\n"
+                "9. ## Features\n"
+                "10. ## API Reference\n"
+                "11. ## Code Reviews — paste the reviews block verbatim\n"
                 "12. ## License — MIT\n\n"
-                "Rules:\n"
-                "- Use real, runnable commands — no placeholders.\n"
-                "- The 'Code Reviews' section must contain the reviews block provided.\n"
-                "- Be concise but complete."
+                "Rules: use real runnable commands, no placeholders."
             )),
             LlmMessage(role="user", content=(
                 f"Project: {ctx.projectName}\n"
@@ -85,7 +75,6 @@ class ScaffoldAgent:
             )),
         ], max_tokens=4096)
 
-        # --- Deps file ---
         deps_result = await call_llm([
             LlmMessage(role="system", content=(
                 f"You are an expert {language.title()} engineer.\n"

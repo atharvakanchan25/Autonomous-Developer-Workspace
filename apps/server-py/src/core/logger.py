@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from src.lib.config import config
+from src.core.config import config
 
 _LEVEL_MAP = {
     "debug": logging.DEBUG,
@@ -17,7 +17,9 @@ _fmt = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
 _level = _LEVEL_MAP.get(config.LOG_LEVEL, logging.INFO)
 
 # Force UTF-8 on stdout so unicode chars don't crash on Windows cp1252 consoles
-_stream_handler = logging.StreamHandler(stream=open(sys.stdout.fileno(), mode="w", encoding="utf-8", closefd=False))
+_stream_handler = logging.StreamHandler(
+    stream=open(sys.stdout.fileno(), mode="w", encoding="utf-8", closefd=False)
+)
 _stream_handler.setFormatter(logging.Formatter(_fmt))
 
 _file_handler = logging.FileHandler(_log_dir / "combined.log", encoding="utf-8")

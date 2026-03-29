@@ -26,7 +26,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "errors",   label: "Errors" },
 ];
 
-const ADMIN_TABS: Tab[] = ["logs", "errors"];
+const ADMIN_TABS: Tab[] = [];
 
 const AUTO_REFRESH_MS = 10_000;
 
@@ -55,23 +55,18 @@ export default function ObservePage() {
     if (!silent) setLoading(true);
     try {
       const projectFilter = selectedProjectId || undefined;
-      const fetches: Promise<any>[] = [
+      const [summaryData, agentsData, timelineData, logsData, errorsData] = await Promise.all([
         api.observe.summary(projectFilter),
         api.observe.agents(100, projectFilter),
         api.observe.timeline(projectFilter),
-      ];
-      // logs and errors are admin-only on the backend
-      if (isAdmin) {
-        fetches.push(
-          api.observe.logs({ limit: "200", ...(projectFilter && { projectId: projectFilter }) }),
-          api.observe.errors(50, projectFilter),
-        );
-      }
-      const results = await Promise.all(fetches);
-      setStats(results[0]);
-      setAgents(results[1]);
-      setTimeline(results[2]);
-      if (isAdmin) { setLogs(results[3].logs); setErrors(results[4]); }
+        isAdmin ? api.observe.logs({ limit: "200", ...(projectFilter && { projectId: projectFilter }) }) : Promise.resolve({ logs: [] }),
+        api.observe.errors(50, projectFilter),
+      ]);
+      setStats(summaryData);
+      setAgents(agentsData);
+      setTimeline(timelineData);
+      if (isAdmin) setLogs(logsData.logs);
+      setErrors(errorsData);
       setLastRefresh(new Date());
     } catch { /* silent */ }
     finally { if (!silent) setLoading(false); }
@@ -177,7 +172,7 @@ export default function ObservePage() {
         {/* Tabs — layoutId sliding underline */}
         <div className="mb-6 flex gap-1 border-b border-gray-700">
           {TABS.map(({ id, label }) => {
-            const restricted = ADMIN_TABS.includes(id) && !isAdmin;
+            const restricted = id === "logs" && !isAdmin;
             return (
               <button
                 key={id}
@@ -237,7 +232,7 @@ export default function ObservePage() {
       <AdminOnlyToast
         show={adminToast}
         onClose={() => setAdminToast(false)}
-        message="System logs and error feeds are restricted to admins."
+        message="System logs are restricted to admins."
       />
     </PageShell>
   );

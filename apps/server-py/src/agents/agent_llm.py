@@ -1,9 +1,9 @@
 import asyncio
 import re
 from dataclasses import dataclass
-from groq import AsyncGroq, RateLimitError
-from src.lib.groq import groq_client
-from src.lib.logger import logger
+from groq import RateLimitError
+from src.core.groq_client import groq_client
+from src.core.logger import logger
 
 DEFAULT_MODEL = "llama-3.3-70b-versatile"
 _MAX_RETRIES = 6
@@ -12,7 +12,7 @@ _BASE_WAIT = 15.0
 
 @dataclass
 class LlmMessage:
-    role: str  # "user" | "assistant" | "system"
+    role: str   # "user" | "assistant" | "system"
     content: str
 
 

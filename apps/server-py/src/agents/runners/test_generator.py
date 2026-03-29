@@ -1,5 +1,3 @@
-import re
-import json
 from src.agents.agent_types import AgentType, AgentContext, AgentResult, Artifact
 from src.agents.agent_llm import call_llm, LlmMessage
 
@@ -19,20 +17,17 @@ TEST_DIRS = {
 
 
 def _test_filename(code_filename: str, language: str, test_dir: str) -> str:
-    """Derive the test filename from the code filename."""
-    basename = code_filename.split("/")[-1].rsplit(".", 1)[0]  # e.g. "auth"
+    basename = code_filename.split("/")[-1].rsplit(".", 1)[0]
     if language == "python":
         return f"{test_dir}/test_{basename}.py"
     if language == "javascript":
         return f"{test_dir}/{basename}.test.js"
     if language == "typescript":
         return f"{test_dir}/{basename}.test.ts"
-    if language == "java":
+    if language in ("java", "kotlin"):
         pascal = "".join(w.capitalize() for w in basename.split("_"))
-        return f"{test_dir}/{pascal}Test.java"
-    if language == "kotlin":
-        pascal = "".join(w.capitalize() for w in basename.split("_"))
-        return f"{test_dir}/{pascal}Test.kt"
+        suffix = "Test" if language == "java" else "Test"
+        return f"{test_dir}/{pascal}{suffix}.{language[:4]}"
     if language == "go":
         return f"{test_dir}/{basename}_test.go"
     if language == "rust":
@@ -55,6 +50,7 @@ class TestGeneratorAgent:
         framework = ctx.framework
         test_framework = TEST_FRAMEWORKS.get(language, "appropriate testing framework")
         test_dir = TEST_DIRS.get(language, "tests")
+        framework_hint = f" using {framework}" if framework else ""
 
         prev = ctx.previousOutputs.get(AgentType.CODE_GENERATOR)
         code_artifact = next((a for a in prev.artifacts if a.type == "code"), None) if prev else None
@@ -63,8 +59,6 @@ class TestGeneratorAgent:
             f"\n\nImplementation to test:\n```{language}\n{code_artifact.content}\n```"
             if code_artifact else ""
         )
-
-        framework_hint = f" using {framework}" if framework else ""
 
         result = await call_llm([
             LlmMessage(role="system", content=(
@@ -83,7 +77,6 @@ class TestGeneratorAgent:
             )),
         ], max_tokens=4096)
 
-        # Mirror the code filename for the test filename
         code_filename = code_artifact.filename if code_artifact else f"src/{ctx.taskTitle}"
         filename = _test_filename(code_filename, language, test_dir)
 

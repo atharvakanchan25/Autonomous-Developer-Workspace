@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable
-from src.lib.logger import logger
+from src.core.logger import logger
 
 
 @dataclass

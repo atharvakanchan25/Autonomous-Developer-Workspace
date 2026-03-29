@@ -1,5 +1,5 @@
 from src.agents.agent_types import AgentType
-from src.lib.logger import logger
+from src.core.logger import logger
 
 _registry: dict[AgentType, object] = {}
 

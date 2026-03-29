@@ -5,26 +5,26 @@ from dataclasses import dataclass, field
 class AgentType(str, Enum):
     CODE_GENERATOR = "CODE_GENERATOR"
     TEST_GENERATOR = "TEST_GENERATOR"
-    CODE_REVIEWER = "CODE_REVIEWER"
-    SCAFFOLD = "SCAFFOLD"
+    CODE_REVIEWER  = "CODE_REVIEWER"
+    SCAFFOLD       = "SCAFFOLD"
 
 
 class AgentRunStatus(str, Enum):
-    RUNNING = "RUNNING"
+    RUNNING   = "RUNNING"
     COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
+    FAILED    = "FAILED"
 
 
 class TaskStatus(str, Enum):
-    PENDING = "PENDING"
+    PENDING     = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
+    COMPLETED   = "COMPLETED"
+    FAILED      = "FAILED"
 
 
 @dataclass
 class Artifact:
-    type: str  # "code" | "test" | "review" | "markdown"
+    type: str       # "code" | "test" | "review" | "markdown" | "readme" | "deps"
     filename: str
     content: str
     language: str = "plaintext"

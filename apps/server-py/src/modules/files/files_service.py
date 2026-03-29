@@ -5,10 +5,10 @@ from typing import Optional
 import io
 import zipfile
 
-from src.lib.firestore import db
-from src.lib.errors import not_found, bad_request
-from src.lib.utils import now_iso
-from src.lib.auth import AuthUser, get_current_user, log_action
+from src.core.database import db
+from src.core.errors import not_found, bad_request
+from src.core.utils import now_iso
+from src.auth.auth import AuthUser, get_current_user, log_action
 
 router = APIRouter()
 MAX_VERSIONS = 50

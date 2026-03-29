@@ -1,15 +1,14 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from src.lib.groq import groq_client
-from src.lib.firestore import db
-from src.lib.errors import not_found, bad_request
-from src.lib.logger import logger
-from src.lib.utils import now_iso
-from src.lib.auth import AuthUser, get_current_user
+from src.core.database import db
+from src.core.errors import not_found, bad_request
+from src.core.logger import logger
+from src.core.utils import now_iso
+from src.auth.auth import AuthUser, get_current_user
 from src.queue.queue import task_queue, JobData
+from src.agents.agent_llm import call_llm, LlmMessage
 
-import asyncio
 import json
 import re
 
@@ -21,8 +20,8 @@ You MUST respond with ONLY a valid JSON object — no markdown, no explanation, 
 
 The JSON must conform exactly to this structure:
 {
-  "language": "string (the BEST programming language for this specific project — e.g. a CLI tool → python, a web app with UI → javascript/typescript, a system tool → go or rust, a data pipeline → python, a mobile app → swift/kotlin)",
-  "framework": "string (the most appropriate framework — e.g. React, FastAPI, Express, Flask, Gin, etc. Empty string if none needed)",
+  "language": "string (the BEST programming language for this specific project)",
+  "framework": "string (the most appropriate framework, empty string if none needed)",
   "tasks": [
     {
       "key": "string (short unique snake_case identifier)",
@@ -35,15 +34,14 @@ The JSON must conform exactly to this structure:
 }
 
 Language selection rules:
-- Simple to-do app / task manager / CRUD app → javascript with React (frontend) or python with Flask/FastAPI (backend API)
-- Web app with UI that users interact with → javascript or typescript with React
+- Simple CRUD app / task manager → python (FastAPI) or javascript (React)
+- Web app with UI → javascript or typescript with React
 - REST API / backend service → python (FastAPI) or javascript (Express) or go (Gin)
 - CLI tool / script → python
 - Real-time app / chat → javascript/typescript with Node.js
-- Data science / ML / analysis → python
+- Data science / ML → python
 - System programming / performance critical → go or rust
 - Mobile app → swift (iOS) or kotlin (Android)
-- If the description says "web app" or implies a browser UI → javascript/typescript
 - NEVER default to python for frontend or UI projects
 
 Task rules:
@@ -82,33 +80,18 @@ _FEW_SHOT_EXAMPLE = {
 
 
 async def _call_llm(description: str) -> tuple[str, int]:
-    import re as _re
-    from groq import RateLimitError
-    for attempt in range(1, 6):
-        try:
-            response = await groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    _FEW_SHOT_EXAMPLE,
-                    {"role": "user", "content": f"Project description: {description.strip()}"},
-                ],
-                max_tokens=2048,
-                temperature=0,
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content or ""
-            if not content:
-                raise bad_request("LLM returned an empty response")
-            tokens_used = response.usage.total_tokens if response.usage else 0
-            return content, tokens_used
-        except RateLimitError as err:
-            if attempt == 5:
-                raise
-            match = _re.search(r"try again in ([\d.]+)s", str(err), _re.IGNORECASE)
-            wait = float(match.group(1)) + 1.0 if match else 15.0
-            logger.warning(f"Groq rate limit on plan generation — waiting {wait:.1f}s (attempt {attempt})")
-            await asyncio.sleep(wait)
+    result = await call_llm(
+        messages=[
+            LlmMessage(role="system", content=_SYSTEM_PROMPT),
+            LlmMessage(role="user", content=_FEW_SHOT_EXAMPLE["content"]),
+            LlmMessage(role="user", content=f"Project description: {description.strip()}"),
+        ],
+        max_tokens=2048,
+        json_mode=True,
+    )
+    if not result.content:
+        raise bad_request("LLM returned an empty response")
+    return result.content, result.tokensUsed
 
 
 def _parse_response(raw: str) -> dict:
@@ -131,14 +114,11 @@ async def generate_plan(body: GeneratePlanRequest, user: AuthUser = Depends(get_
     project_doc = db.collection("projects").document(body.projectId).get()
     if not project_doc.exists:
         raise not_found("Project")
-    
+
     project_data = project_doc.to_dict()
-    
-    # Check access: admin can generate for any project, users only for their own
     if not user.can_access_resource(project_data.get("ownerId")):
-        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     project = {"id": project_doc.id, **project_data}
 
     raw, tokens_used = await _call_llm(body.description)
@@ -171,18 +151,14 @@ async def generate_plan(body: GeneratePlanRequest, user: AuthUser = Depends(get_
         "projectId": body.projectId, "prompt": body.description,
         "rawResponse": raw, "taskCount": len(tasks), "language": language,
         "framework": framework, "userId": user.uid, "userRole": user.role,
-        "tokensUsed": tokens_used,
-        "createdAt": now,
+        "tokensUsed": tokens_used, "createdAt": now,
     })
-    
-    # Update project with detected language
+
     db.collection("projects").document(body.projectId).update({
-        "language": language,
-        "framework": framework,
-        "updatedAt": now,
+        "language": language, "framework": framework, "updatedAt": now,
     })
-    
-    batch.commit()  # tasks must be in Firestore before the worker reads them
+
+    batch.commit()
 
     saved_tasks = [
         {
@@ -207,20 +183,15 @@ async def generate_plan(body: GeneratePlanRequest, user: AuthUser = Depends(get_
     edges = [{"from": dep, "to": t["key"]} for t in tasks for dep in t.get("dependsOn", [])]
 
     logger.info(f"Plan generated: project={body.projectId} tasks={len(tasks)}")
-    
-    # Queue tasks for execution (tasks with no dependencies first)
+
     for i, t in enumerate(tasks):
         if not t.get("dependsOn", []):
             await task_queue.add(
                 task_refs[i].id,
-                JobData(
-                    taskId=task_refs[i].id,
-                    projectId=body.projectId,
-                    title=t["title"]
-                )
+                JobData(taskId=task_refs[i].id, projectId=body.projectId, title=t["title"])
             )
             logger.info(f"Queued task for execution: {task_refs[i].id}")
-    
+
     return {
         "project": {**project, "language": language, "framework": framework},
         "tasks": saved_tasks,

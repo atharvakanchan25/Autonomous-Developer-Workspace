@@ -1,8 +1,8 @@
-from src.lib.socket import sio
-from src.lib.firestore import db
-from src.lib.logger import logger
-from src.lib.utils import now_iso
-from src.lib.socket_events import (
+from src.realtime.server import sio
+from src.core.database import db
+from src.core.logger import logger
+from src.core.utils import now_iso
+from src.realtime.events import (
     TaskUpdatedPayload, AgentLogPayload,
     PipelineStagePayload, DeploymentUpdatedPayload,
 )
@@ -17,7 +17,6 @@ async def emit_task_updated(payload: TaskUpdatedPayload):
 
 
 async def emit_agent_log(payload: AgentLogPayload):
-    # Persist to Firestore for observability
     try:
         db.collection("observabilityLogs").add({
             "level": payload.level.upper(),
@@ -31,7 +30,7 @@ async def emit_agent_log(payload: AgentLogPayload):
         })
     except Exception as e:
         logger.warning(f"Failed to persist observability log: {e}")
-    
+
     await sio.emit("agent:log", payload.model_dump(), room=_room(payload.projectId))
 
 

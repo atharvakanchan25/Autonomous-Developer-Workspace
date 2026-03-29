@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
 
-from src.lib.firestore import db
-from src.lib.auth import AuthUser, get_current_user, require_role
+from src.core.database import db
+from src.auth.auth import AuthUser, get_current_user, require_role
 
 router = APIRouter()
 
@@ -198,8 +198,17 @@ def get_execution_timeline(
 
 
 @router.get("/errors")
-def get_errors(projectId: Optional[str] = Query(None), limit: int = Query(50, le=200), user: AuthUser = Depends(require_role("admin"))):
-    """Get error logs. Admin only."""
+def get_errors(projectId: Optional[str] = Query(None), limit: int = Query(50, le=200), user: AuthUser = Depends(get_current_user)):
+    """Get error logs. Accessible to all users (filtered by their projects)."""
+    # Non-admins only see errors from their own projects
+    allowed_project_ids: Optional[list] = None
+    if not user.is_admin():
+        allowed_project_ids = [d.id for d in db.collection("projects").where("ownerId", "==", user.uid).stream()]
+        if projectId and projectId not in allowed_project_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if not allowed_project_ids:
+            return []
+    
     query = (
         db.collection("observabilityLogs")
         .where("level", "==", "ERROR")
@@ -208,6 +217,9 @@ def get_errors(projectId: Optional[str] = Query(None), limit: int = Query(50, le
     )
     if projectId:
         query = query.where("projectId", "==", projectId)
+    elif allowed_project_ids is not None:
+        # For non-admins without specific projectId, filter by their projects
+        query = query.where("projectId", "in", allowed_project_ids)
     
     snap = query.stream()
     return [{"id": d.id, **d.to_dict()} for d in snap]

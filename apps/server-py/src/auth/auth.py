@@ -5,12 +5,12 @@ from firebase_admin import auth as firebase_auth, credentials
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from src.lib.config import config
-from src.lib.firestore import db
-from src.lib.utils import now_iso
-from src.lib.logger import logger
+from src.core.config import config
+from src.core.database import db
+from src.core.utils import now_iso
+from src.core.logger import logger
 
-# Initialize Firebase Admin SDK
+# Initialize Firebase Admin SDK once
 if not firebase_admin._apps:
     cred = credentials.Certificate({
         "type": "service_account",
@@ -25,7 +25,7 @@ _bearer = HTTPBearer(auto_error=False)
 ROLES = ("user", "admin")
 
 # Source-of-truth admin emails — role is ALWAYS enforced from here,
-# regardless of what is stored in Firestore.
+# regardless of what is stored in the database.
 ADMIN_EMAILS: set[str] = {
     "tanvihole@adw.com",
     "saloni@adw.com",
@@ -33,8 +33,9 @@ ADMIN_EMAILS: set[str] = {
     "prajwalshedge@adw.com",
     "aryankanchan@adw.com",
     "atharvakanchan959@gmail.com",
+    # Add your email here (lowercase)
+    # "youremail@example.com",
 }
-# Normalize to lowercase to avoid case-mismatch issues
 ADMIN_EMAILS = {e.lower() for e in ADMIN_EMAILS}
 
 
@@ -65,7 +66,8 @@ async def get_current_user(
 
     try:
         decoded = firebase_auth.verify_id_token(creds.credentials)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     uid = decoded["uid"]
@@ -73,11 +75,11 @@ async def get_current_user(
 
     # Email is the single source of truth for admin role (case-insensitive)
     correct_role = "admin" if email.lower() in ADMIN_EMAILS else "user"
+    logger.info(f"Auth check: {email} -> role: {correct_role} (in ADMIN_EMAILS: {email.lower() in ADMIN_EMAILS})")
 
     doc = db.collection("users").document(uid).get()
     if doc.exists:
         stored_role = doc.to_dict().get("role", "user")
-        # Correct the stored role if it doesn't match the source of truth
         if stored_role != correct_role:
             db.collection("users").document(uid).update({
                 "role": correct_role,
@@ -106,7 +108,7 @@ def require_role(minimum: str):
         if not user.has_role(minimum):
             raise HTTPException(
                 status_code=403,
-                detail=f"Access denied. Required role: {minimum}"
+                detail=f"Access denied. Required role: {minimum}",
             )
         return user
     return _check

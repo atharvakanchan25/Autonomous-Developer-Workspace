@@ -18,16 +18,12 @@ LANGUAGE_DIRS = {
     "kotlin": "src/main/kotlin",
 }
 
-# Naming convention per language
+
 def _to_filename(base: str, language: str) -> str:
-    """Convert a base name to the correct naming convention for the language."""
     words = re.sub(r"[^a-z0-9]+", "_", base.lower()).strip("_").split("_")
     words = [w for w in words if w]
     if language in ("java", "kotlin", "csharp"):
         return "".join(w.capitalize() for w in words)
-    if language == "go":
-        return "_".join(words)
-    # python, javascript, typescript, ruby, php, rust, cpp, c, swift
     return "_".join(words)
 
 
@@ -41,7 +37,6 @@ class CodeGeneratorAgent:
         framework = ctx.framework
         extension = LANGUAGE_EXTENSIONS.get(language, ".txt")
         src_dir = LANGUAGE_DIRS.get(language, "src")
-
         framework_hint = f" using {framework}" if framework else ""
 
         result = await call_llm([
@@ -49,13 +44,11 @@ class CodeGeneratorAgent:
                 f"You are an expert {language.title()} engineer{framework_hint}.\n"
                 f"Project: {ctx.projectName}\n\n"
                 "Respond with a JSON object with exactly two keys:\n"
-                '  "filename": a SHORT snake_case (or language-appropriate) filename WITHOUT extension and WITHOUT directory — max 2-3 words, e.g. "auth", "db_models", "user_routes"\n'
+                '  "filename": a SHORT snake_case filename WITHOUT extension and WITHOUT directory — max 2-3 words\n'
                 '  "code": the complete implementation code as a string\n\n'
-                "Code rules:\n"
-                f"- Write ONLY {language.title()} code — do NOT use any other language.\n"
+                f"- Write ONLY {language.title()} code.\n"
                 f"- Use modern {language.title()} best practices{framework_hint}.\n"
                 "- Include all necessary imports.\n"
-                "- Concise docstrings on public functions only.\n"
                 "- One file, focused on exactly what the task describes.\n"
                 "- No markdown fences inside the code string."
             )),
@@ -65,7 +58,6 @@ class CodeGeneratorAgent:
             )),
         ], max_tokens=8192, json_mode=True)
 
-        # Parse LLM JSON response
         try:
             parsed = json.loads(result.content)
             raw_name = str(parsed.get("filename", ctx.taskTitle))

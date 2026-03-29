@@ -34,6 +34,15 @@ interface UserActivity {
   activity: { id: string; action: string; meta: Record<string, string>; createdAt: string }[];
 }
 
+interface UserProjects {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  taskCount: number;
+}
+
 interface TokenUsage {
   uid: string;
   email: string;
@@ -116,9 +125,14 @@ export default function AdminPage() {
   const [loadingData, setLoadingData] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // user activity drilldown
-  const [activityUser, setActivityUser]   = useState<UserActivity | null>(null);
-  const [activityLoading, setActivityLoading] = useState(false);
+  // user drilldown
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userTab, setUserTab] = useState<"overview" | "projects" | "activity" | "tokens">("overview");
+  const [userActivity, setUserActivity] = useState<UserActivity | null>(null);
+  const [userProjects, setUserProjects] = useState<UserProjects[]>([]);
+  const [userTokens, setUserTokens] = useState<TokenCall[]>([]);
+  const [userLoading, setUserLoading] = useState(false);
+  const [userError, setUserError] = useState<string | null>(null);
 
   const [tokenUsage, setTokenUsage]               = useState<TokenUsage[]>([]);
   const [tokenUser, setTokenUser]                 = useState<TokenUsage | null>(null);
@@ -129,11 +143,14 @@ export default function AdminPage() {
   const [auditFilter, setAuditFilter] = useState<string>("ALL");
 
   useEffect(() => {
-    if (!loading && (!user || !hasRole("admin"))) router.replace("/home");
-  }, [user, loading, hasRole, router]);
+    if (!loading && !hasRole("admin")) {
+      router.replace("/home");
+    }
+  }, [loading, hasRole, router]);
 
   useEffect(() => {
     if (user && hasRole("admin") && !dataLoaded) {
+      console.log("[Admin] Loading admin data for user:", user.email, "role:", user.role);
       loadData();
       setDataLoaded(true);
     }
@@ -171,13 +188,25 @@ export default function AdminPage() {
 
   async function loadUsers() {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) {
+        console.error("[Admin] No auth token available");
+        return;
+      }
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) { const d = await res.json(); setUsers(Array.isArray(d) ? d : []); }
-    } catch { setUsers([]); }
+      if (res.ok) {
+        const d = await res.json();
+        console.log("[Admin] Loaded users:", d.length);
+        setUsers(Array.isArray(d) ? d : []);
+      } else {
+        console.error("[Admin] Failed to load users:", res.status);
+      }
+    } catch (err) {
+      console.error("[Admin] Error loading users:", err);
+      setUsers([]);
+    }
   }
 
   async function loadAuditLogs() {
@@ -192,19 +221,44 @@ export default function AdminPage() {
   }
 
   async function loadProjects() {
-    try { setProjects(await api.projects.list()); } catch { /* ignore */ }
+    try { setProjects(await api.admin.projects()); } catch { /* ignore */ }
   }
 
-  async function openUserActivity(uid: string) {
-    setActivityLoading(true);
-    setActivityUser(null);
+  async function openUser(u: User) {
+    setSelectedUser(u);
+    setUserTab("overview");
+    setUserActivity(null);
+    setUserProjects([]);
+    setUserTokens([]);
+    setUserLoading(true);
+    setUserError(null);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${uid}/activity`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setActivityUser(await res.json());
-    } finally { setActivityLoading(false); }
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) throw new Error("No auth token");
+      
+      const [actRes, projRes, tokRes] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${u.uid}/activity`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${u.uid}/projects`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/token-usage/${u.uid}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+      
+      if (actRes.ok) setUserActivity(await actRes.json());
+      if (projRes.ok) setUserProjects(await projRes.json());
+      if (tokRes.ok) setUserTokens(await tokRes.json());
+      
+      console.log("[Admin] Loaded user profile for:", u.email);
+    } catch (err) {
+      console.error("[Admin] Error loading user profile:", err);
+      setUserError(err instanceof Error ? err.message : "Failed to load user data");
+    } finally {
+      setUserLoading(false);
+    }
   }
 
   async function changeRole(uid: string, role: string) {
@@ -269,8 +323,23 @@ export default function AdminPage() {
     <div className="flex h-screen flex-col overflow-hidden bg-[#0f1419]">
       {/* Header */}
       <div className="border-b border-gray-700 bg-[#1a1f2e] px-6 py-4">
-        <h1 className="text-xl font-semibold text-gray-100">Admin Panel</h1>
-        <p className="text-sm text-gray-500">Manage users, projects, and activity</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-100">Admin Panel</h1>
+            <p className="text-sm text-gray-500">Manage users, projects, and activity</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-400">Logged in as</p>
+            <p className="text-sm font-medium text-gray-200">{user.email}</p>
+            <span className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              user.email === SUPERUSER_EMAIL
+                ? "border-indigo-700 bg-indigo-900/30 text-indigo-400"
+                : "border-yellow-700 bg-yellow-900/30 text-yellow-400"
+            }`}>
+              {user.email === SUPERUSER_EMAIL ? "SUPERUSER" : "ADMIN"}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -278,7 +347,7 @@ export default function AdminPage() {
         {(["users", "admins", "tokens", "audit", "projects"] as const).map((t) => (
           <button
             key={t}
-            onClick={() => { setTab(t); setActivityUser(null); setTokenUser(null); }}
+            onClick={() => { setTab(t); setSelectedUser(null); setTokenUser(null); }}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
               tab === t
                 ? "border-b-2 border-indigo-500 text-indigo-400"
@@ -302,81 +371,221 @@ export default function AdminPage() {
           </div>
 
         ) : tab === "users" ? (
-          activityUser ? (
-            /* ── User Activity Drilldown ── */
+          selectedUser ? (
+            /* ── User Profile Drilldown ── */
             <div>
               <button
-                onClick={() => setActivityUser(null)}
+                onClick={() => setSelectedUser(null)}
                 className="mb-4 flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
               >
                 ← Back to users
               </button>
 
-              {/* Profile card */}
+              {/* Profile header */}
               <div className="mb-6 rounded-xl border border-gray-700 bg-[#1a1f2e] p-5">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-base font-semibold text-gray-100">{activityUser.email}</p>
-                    <p className="mt-0.5 text-xs text-gray-500">UID: {activityUser.uid}</p>
-                    <p className="mt-0.5 text-xs text-gray-500">Joined {new Date(activityUser.createdAt).toLocaleDateString()}</p>
+                    <p className="text-base font-semibold text-gray-100">{selectedUser.email}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">UID: {selectedUser.uid}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">Joined {new Date(selectedUser.createdAt).toLocaleDateString()}</p>
                   </div>
                   <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-                    activityUser.role === "admin"
+                    selectedUser.role === "admin"
                       ? "border-yellow-700 bg-yellow-900/30 text-yellow-400"
                       : "border-gray-700 bg-gray-800 text-gray-400"
                   }`}>
-                    {activityUser.role}
+                    {selectedUser.role}
                   </span>
                 </div>
 
                 {/* Stats row */}
-                <div className="mt-4 grid grid-cols-3 gap-3">
-                  {[
-                    { label: "Projects", value: activityUser.stats.projectCount },
-                    { label: "Tasks",    value: activityUser.stats.taskCount },
-                    { label: "Actions",  value: activityUser.stats.actionCount },
-                  ].map((s) => (
-                    <div key={s.label} className="rounded-lg border border-gray-700 bg-[#0f1419] p-3 text-center">
-                      <p className="text-xl font-bold text-gray-100">{s.value}</p>
-                      <p className="text-xs text-gray-500">{s.label}</p>
-                    </div>
-                  ))}
-                </div>
+                {userActivity && (
+                  <div className="mt-4 grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Projects", value: userActivity.stats.projectCount },
+                      { label: "Tasks",    value: userActivity.stats.taskCount },
+                      { label: "Actions",  value: userActivity.stats.actionCount },
+                    ].map((s) => (
+                      <div key={s.label} className="rounded-lg border border-gray-700 bg-[#0f1419] p-3 text-center">
+                        <p className="text-xl font-bold text-gray-100">{s.value}</p>
+                        <p className="text-xs text-gray-500">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Activity timeline */}
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Activity Timeline</h3>
-              {activityUser.activity.length === 0 ? (
-                <p className="text-sm text-gray-500">No activity recorded yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {activityUser.activity.map((a) => {
-                    const badge = actionBadge(a.action);
-                    const summary = metaSummary(a.action, a.meta);
-                    return (
-                      <div key={a.id} className="flex items-start gap-3 rounded-lg border border-gray-700/50 bg-[#1a1f2e] px-4 py-3">
-                        <span className="mt-0.5 text-base">{badge.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${badge.color}`}>
-                              {badge.label}
-                            </span>
-                            {summary && <span className="text-xs text-gray-400 truncate">{summary}</span>}
-                          </div>
-                          {a.meta && Object.keys(a.meta).length > 0 && (
-                            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                              {Object.entries(a.meta).map(([k, v]) => (
-                                <span key={k} className="font-mono text-[10px] text-gray-600">
-                                  {k}: <span className="text-gray-400">{String(v)}</span>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <span className="shrink-0 text-[11px] text-gray-600">{timeAgo(a.createdAt)}</span>
+              {/* Sub-tabs */}
+              <div className="mb-4 flex gap-2 border-b border-gray-700">
+                {(["overview", "projects", "activity", "tokens"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setUserTab(t)}
+                    className={`px-3 py-2 text-sm font-medium capitalize transition-colors ${
+                      userTab === t
+                        ? "border-b-2 border-indigo-500 text-indigo-400"
+                        : "text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab content */}
+              {userLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+                </div>
+              ) : userError ? (
+                <div className="rounded-lg border border-red-700 bg-red-900/20 p-4">
+                  <p className="text-sm text-red-400">Error: {userError}</p>
+                  <button
+                    onClick={() => openUser(selectedUser)}
+                    className="mt-2 text-xs text-red-300 hover:text-red-200 underline"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : userTab === "overview" ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                    <h3 className="mb-2 text-sm font-semibold text-gray-300">Account Details</h3>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Email:</span>
+                        <span className="text-gray-300">{selectedUser.email}</span>
                       </div>
-                    );
-                  })}
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Role:</span>
+                        <span className="text-gray-300">{selectedUser.role}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">User ID:</span>
+                        <span className="font-mono text-gray-400">{selectedUser.uid}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Joined:</span>
+                        <span className="text-gray-300">{new Date(selectedUser.createdAt).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {userActivity && (
+                    <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                      <h3 className="mb-2 text-sm font-semibold text-gray-300">Activity Summary</h3>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Projects:</span>
+                          <span className="text-gray-300">{userActivity.stats.projectCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Tasks:</span>
+                          <span className="text-gray-300">{userActivity.stats.taskCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Actions:</span>
+                          <span className="text-gray-300">{userActivity.stats.actionCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : userTab === "projects" ? (
+                <div>
+                  {userProjects.length === 0 ? (
+                    <p className="text-sm text-gray-500">No projects created yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {userProjects.map((p) => (
+                        <div key={p.id} className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-200">{p.name}</p>
+                              {p.description && (
+                                <p className="mt-1 text-xs text-gray-500 line-clamp-2">{p.description}</p>
+                              )}
+                              <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-600">
+                                <span>{p.taskCount} tasks</span>
+                                <span>•</span>
+                                <span>Created {new Date(p.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : userTab === "tokens" ? (
+                <div>
+                  {userTokens.length === 0 ? (
+                    <p className="text-sm text-gray-500">No token usage recorded yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {userTokens.map((call) => (
+                        <div key={call.id} className="rounded-lg border border-gray-700/50 bg-[#1a1f2e] px-4 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${
+                                  call.source === "plan"
+                                    ? "border-purple-700 bg-purple-900/30 text-purple-400"
+                                    : "border-indigo-700 bg-indigo-900/30 text-indigo-400"
+                                }`}>
+                                  {call.agentType.replace(/_/g, " ")}
+                                </span>
+                                <span className={`text-[11px] ${
+                                  call.status === "COMPLETED" ? "text-emerald-400" :
+                                  call.status === "FAILED" ? "text-red-400" : "text-gray-400"
+                                }`}>{call.status}</span>
+                                <span className="text-xs font-semibold text-gray-300">{call.tokensUsed.toLocaleString()} tokens</span>
+                              </div>
+                              {call.prompt && (
+                                <p className="mt-1.5 text-xs text-gray-500 line-clamp-2">{call.prompt}</p>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-[11px] text-gray-600">{timeAgo(call.createdAt)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : userTab === "activity" ? (
+                <div>
+                  {!userActivity || userActivity.activity.length === 0 ? (
+                    <p className="text-sm text-gray-500">No activity recorded yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {userActivity.activity.map((a) => {
+                        const badge = actionBadge(a.action);
+                        const summary = metaSummary(a.action, a.meta);
+                        return (
+                          <div key={a.id} className="flex items-start gap-3 rounded-lg border border-gray-700/50 bg-[#1a1f2e] px-4 py-3">
+                            <span className="mt-0.5 text-base">{badge.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${badge.color}`}>
+                                  {badge.label}
+                                </span>
+                                {summary && <span className="text-xs text-gray-400 truncate">{summary}</span>}
+                              </div>
+                              {a.meta && Object.keys(a.meta).length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                                  {Object.entries(a.meta).map(([k, v]) => (
+                                    <span key={k} className="font-mono text-[10px] text-gray-600">
+                                      {k}: <span className="text-gray-400">{String(v)}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-[11px] text-gray-600">{timeAgo(a.createdAt)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -424,10 +633,10 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-3">
                           <button
-                            onClick={() => { setActivityLoading(true); openUserActivity(u.uid); }}
+                            onClick={() => openUser(u)}
                             className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
                           >
-                            Activity
+                            View Profile
                           </button>
                           {isSuperuser && (
                             <button
@@ -443,11 +652,6 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
-              {activityLoading && (
-                <div className="flex items-center justify-center py-6">
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
-                </div>
-              )}
             </div>
           )
 
@@ -748,7 +952,7 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-xs text-gray-400">
                         {owner ? (
                           <button
-                            onClick={() => openUserActivity(owner.uid)}
+                            onClick={() => openUser(owner)}
                             className="text-indigo-400 hover:text-indigo-300 transition-colors"
                           >
                             {owner.email}

@@ -10,10 +10,10 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import socketio
 
-from src.lib.config import config
-from src.lib.logger import logger
-from src.lib.firestore import db
-from src.lib.socket import sio
+from src.core.config import config
+from src.core.logger import logger
+from src.core.database import db
+from src.realtime.server import sio
 from src.lib.mcp_server import mcp
 from src.agents.agent_service import bootstrap_agents, router as agents_router
 from src.modules.projects.projects_service import router as projects_router
@@ -31,7 +31,6 @@ import src.queue.worker  # noqa: F401 — registers the job handler as a side ef
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle manager."""
     try:
         bootstrap_agents()
         worker_task = asyncio.create_task(task_queue.start_worker())
@@ -49,7 +48,6 @@ async def lifespan(app: FastAPI):
         logger.info("[OK] Server shut down")
 
 
-# slowapi expects "<count> per <period>" e.g. "200 per minute"
 _window_seconds = config.RATE_LIMIT_WINDOW_MS // 1000
 _rate_limit_str = f"{config.RATE_LIMIT_MAX} per {_window_seconds} second"
 
@@ -102,10 +100,8 @@ async def not_found_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=404, content={"error": "Route not found"})
 
 
-# ── Mount MCP ────────────────────────────────────────────────────────────────
+# ── Mount MCP ─────────────────────────────────────────────────────────────────
 app.mount("/mcp", mcp.streamable_http_app())
 
 # ── Mount Socket.IO ───────────────────────────────────────────────────────────
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
-
-

@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 import json
 
-from src.lib.auth import AuthUser, get_current_user
-from src.lib.groq import groq_client
-from src.lib.logger import logger
-from src.lib.firestore import db
-from src.lib.utils import now_iso
-from src.lib.errors import not_found
+from src.auth.auth import AuthUser, get_current_user
+from src.core.groq_client import groq_client
+from src.core.logger import logger
+from src.core.database import db
+from src.core.utils import now_iso
+from src.core.errors import not_found
 
 router = APIRouter()
 
