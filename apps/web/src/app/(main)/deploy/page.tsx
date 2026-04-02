@@ -87,9 +87,9 @@ export default function DeployPage() {
   return (
     <PageShell>
       {/* Top bar */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700 bg-[#1a1f2e] px-8">
+      <header className="app-topbar flex h-20 shrink-0 items-center justify-between px-8">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-medium text-gray-100">Deployments</h1>
+          <h1 className="app-title text-2xl font-semibold text-gray-100">Deployments</h1>
           <span className="flex items-center gap-1.5 text-xs text-gray-500">
             <span
               className={`h-1.5 w-1.5 rounded-full ${
@@ -105,7 +105,7 @@ export default function DeployPage() {
           <motion.button
             onClick={handleTrigger}
             disabled={!selectedId || triggering}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            className="app-button-primary flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-40"
             whileTap={buttonTap}
             transition={{ duration: duration.fast }}
           >
@@ -131,7 +131,7 @@ export default function DeployPage() {
             animate="visible"
           >
             {stats.map(({ label, value, color }) => (
-              <motion.div key={label} variants={fadeUp} className="rounded-xl border border-gray-700 bg-[#1a1f2e] px-5 py-4 shadow-sm">
+              <motion.div key={label} variants={fadeUp} className="app-panel rounded-[24px] px-5 py-4">
                 <p className={`text-2xl font-semibold ${color.replace('gray-900', 'gray-100').replace('indigo-600', 'indigo-400').replace('green-600', 'green-400').replace('red-600', 'red-400')}`}>{value}</p>
                 <p className="mt-0.5 text-xs text-gray-400">{label}</p>
               </motion.div>
@@ -144,7 +144,7 @@ export default function DeployPage() {
         )}
 
         {!selectedId ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-700 py-20">
+          <div className="app-empty flex flex-col items-center justify-center rounded-[28px] py-20">
             <p className="text-sm text-gray-500">Select a project to view deployments</p>
           </div>
         ) : loading ? (
@@ -153,7 +153,7 @@ export default function DeployPage() {
             Loading deployments…
           </div>
         ) : deployments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-700 py-20 text-center">
+          <div className="app-empty flex flex-col items-center justify-center rounded-[28px] py-20 text-center">
             <p className="text-sm text-gray-500">No deployments yet.</p>
             <p className="mt-1 text-xs text-gray-600">
               Deployments trigger automatically when a task pipeline completes.

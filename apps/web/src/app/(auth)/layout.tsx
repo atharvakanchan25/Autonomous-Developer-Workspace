@@ -21,7 +21,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   }, [router]);
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-[#0f1419] px-4">
+    <div className="app-auth-shell flex min-h-screen w-full items-center justify-center px-4 py-10">
       {children}
     </div>
   );

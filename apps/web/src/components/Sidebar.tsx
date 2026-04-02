@@ -99,7 +99,7 @@ const NAV = [
 
 function Avatar({ user, isAdmin, size = "md" }: { user: User; isAdmin: boolean; size?: "sm" | "md" }) {
   const dim = size === "sm" ? "h-7 w-7 text-[10px]" : "h-8 w-8 text-xs";
-  const ring = isAdmin ? "ring-2 ring-red-500/70" : "ring-2 ring-gray-700";
+  const ring = isAdmin ? "ring-2 ring-red-400/70" : "ring-2 ring-[rgba(45,212,191,0.35)]";
 
   if (user.photoURL) {
     return (
@@ -117,7 +117,7 @@ function Avatar({ user, isAdmin, size = "md" }: { user: User; isAdmin: boolean; 
     .join("")
     .toUpperCase();
   return (
-    <div className={`flex ${dim} items-center justify-center rounded-full font-semibold text-white ${ring} ${isAdmin ? "bg-red-700" : "bg-indigo-600"}`}>
+    <div className={`flex ${dim} items-center justify-center rounded-full font-semibold text-white ${ring} ${isAdmin ? "bg-red-600" : "bg-[var(--accent-strong)]"}`}>
       {initials}
     </div>
   );
@@ -157,7 +157,7 @@ function AccountPopover({ user, role, onClose, onLogout }: {
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
       <motion.div
-        className="absolute bottom-full left-0 z-50 mb-2 w-[240px] overflow-hidden rounded-xl border border-gray-700 bg-[#1a1f2e] shadow-2xl"
+        className="app-panel-strong absolute bottom-full left-0 z-50 mb-3 w-[260px] overflow-hidden rounded-2xl"
         initial={{ opacity: 0, y: 8, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.97 }}
@@ -165,7 +165,7 @@ function AccountPopover({ user, role, onClose, onLogout }: {
       >
         {/* Admin privilege banner */}
         {isAdmin && (
-          <div className="flex items-center gap-2 bg-red-900/30 border-b border-red-800/40 px-4 py-2">
+          <div className="flex items-center gap-2 border-b border-red-500/20 bg-red-500/10 px-4 py-2.5">
             <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0 text-red-400">
               <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
@@ -174,7 +174,7 @@ function AccountPopover({ user, role, onClose, onLogout }: {
         )}
 
         {/* User header */}
-        <div className="flex items-center gap-3 border-b border-gray-700 px-4 py-3.5">
+        <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
           <Avatar user={user} isAdmin={isAdmin} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -187,25 +187,25 @@ function AccountPopover({ user, role, onClose, onLogout }: {
                 </span>
               )}
             </div>
-            <p className="truncate text-[11px] text-gray-500">{user.email}</p>
+            <p className="truncate text-[11px] text-[var(--text-muted)]">{user.email}</p>
           </div>
         </div>
 
         {/* Account details */}
-        <div className="space-y-2 px-4 py-3 border-b border-gray-700">
+        <div className="space-y-2 px-4 py-3.5 border-b border-white/10">
           {/* Role + permissions */}
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-gray-500">Role</span>
             {isAdmin ? (
               <span className="rounded-full bg-red-900/50 px-2 py-0.5 text-[10px] font-medium text-red-300">Admin</span>
             ) : (
-              <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[10px] font-medium text-gray-400">User</span>
+              <span className="app-chip rounded-full px-2 py-0.5 text-[10px] font-medium">User</span>
             )}
           </div>
 
           {/* Permissions summary — only shown for admins */}
           {isAdmin && (
-            <div className="rounded-lg bg-red-950/30 border border-red-900/30 px-3 py-2 space-y-1">
+            <div className="space-y-1 rounded-xl border border-red-500/15 bg-red-500/8 px-3 py-2">
               {[
                 "Full project & task access",
                 "User management",
@@ -225,7 +225,7 @@ function AccountPopover({ user, role, onClose, onLogout }: {
           {/* Sign-in provider */}
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-gray-500">Signed in with</span>
-            <span className="rounded-full bg-indigo-900/50 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
+            <span className="rounded-full border border-[rgba(45,212,191,0.22)] bg-[rgba(45,212,191,0.12)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">
               {provider}
             </span>
           </div>
@@ -275,7 +275,7 @@ function AccountPopover({ user, role, onClose, onLogout }: {
         <div className="px-2 py-2">
           <button
             onClick={onLogout}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-400 transition-colors hover:bg-red-900/20 hover:text-red-300"
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0">
               <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
@@ -306,27 +306,30 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-[200px] shrink-0 flex-col border-r border-gray-700 bg-[#1a1f2e]">
+    <aside className="app-panel-strong relative m-3 flex h-[calc(100vh-1.5rem)] w-[228px] shrink-0 flex-col overflow-hidden rounded-[28px]">
       {/* Logo */}
-      <div className="flex h-14 items-center border-b border-gray-700 px-5">
+      <div className="flex h-20 items-center border-b border-white/10 px-6">
         <Link href="/home" className="flex items-center gap-2.5">
           <motion.div
-            className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-600"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--accent),#0f766e)] text-[var(--accent-contrast)] shadow-[0_14px_28px_rgba(20,184,166,0.28)]"
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.94 }}
             transition={{ duration: duration.fast }}
           >
-            <svg viewBox="0 0 16 16" fill="white" className="h-3.5 w-3.5">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="h-4.5 w-4.5">
               <path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 1.5L14 6v4.5L8 14 2 10.5V6L8 2.5z" />
             </svg>
           </motion.div>
-          <span className="text-sm font-semibold tracking-tight text-gray-100">ADW</span>
+          <div>
+            <span className="font-display block text-sm font-semibold tracking-tight text-white">ADW</span>
+            <span className="block text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">Workspace</span>
+          </div>
         </Link>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <ul className="space-y-0.5">
+      <nav className="scrollbar-thin flex-1 overflow-y-auto px-4 py-5">
+        <ul className="space-y-1.5">
           {NAV.map(({ href, label, icon, ...item }) => {
             const isAdminOnly = (item as any).adminOnly;
             // Show admin link only when auth is loaded and user is admin
@@ -336,15 +339,15 @@ export function Sidebar() {
             return (
               <li key={href}>
                 <Link href={href} className="relative block">
-                  {active && <span className="absolute inset-0 rounded-md bg-indigo-900/40" />}
+                  {active && <span className="absolute inset-0 rounded-2xl border border-[rgba(45,212,191,0.16)] bg-[linear-gradient(90deg,rgba(45,212,191,0.16),rgba(45,212,191,0.04))]" />}
                   <span
-                    className={`relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                      active ? "font-medium text-indigo-300" : "text-gray-400 hover:text-gray-200"
+                    className={`relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm transition-colors ${
+                      active ? "font-medium text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-white/5 hover:text-white"
                     }`}
                   >
-                    <span className={active ? "text-indigo-400" : "text-gray-500"}>{icon}</span>
-                    {label}
-                  </span>
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-xl border ${active ? "border-[rgba(45,212,191,0.2)] bg-[rgba(45,212,191,0.12)] text-[var(--accent)]" : "border-white/10 bg-white/5 text-[var(--text-muted)]"}`}>{icon}</span>
+                  {label}
+                </span>
                 </Link>
               </li>
             );
@@ -353,7 +356,7 @@ export function Sidebar() {
       </nav>
 
       {/* Account footer */}
-      <div className="relative border-t border-gray-700 px-3 py-3">
+      <div className="relative border-t border-white/10 px-4 py-4">
         <AnimatePresence>
           {open && user && (
             <AccountPopover
@@ -368,14 +371,14 @@ export function Sidebar() {
         {user ? (
           <button
             onClick={() => setOpen((s) => !s)}
-            className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 transition-colors ${
-              isAdmin ? "hover:bg-red-900/20" : "hover:bg-gray-800/60"
+            className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-3 transition-colors ${
+              isAdmin ? "hover:bg-red-500/10" : "hover:bg-white/5"
             }`}
           >
             <Avatar user={user} isAdmin={isAdmin} />
             <div className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-1.5">
-                <p className="truncate text-xs font-medium text-gray-200">
+                <p className="truncate text-xs font-medium text-gray-100">
                   {user.displayName ?? "Account"}
                 </p>
                 {/* Admin badge — always visible in footer */}
@@ -385,19 +388,19 @@ export function Sidebar() {
                   </span>
                 )}
               </div>
-              <p className="truncate text-[10px] text-gray-500">{user.email}</p>
+              <p className="truncate text-[10px] text-[var(--text-muted)]">{user.email}</p>
             </div>
             <svg
               viewBox="0 0 20 20" fill="currentColor"
-              className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""} ${isAdmin ? "text-red-500/60" : "text-gray-500"}`}
+              className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""} ${isAdmin ? "text-red-400/70" : "text-[var(--text-muted)]"}`}
             >
               <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
             </svg>
           </button>
         ) : (
           <div className="px-2 py-1">
-            <p className="text-[11px] text-gray-500">Autonomous Developer</p>
-            <p className="text-[11px] text-gray-600">Workspace v1.0</p>
+            <p className="text-[11px] text-[var(--text-secondary)]">Autonomous Developer</p>
+            <p className="text-[11px] text-[var(--text-muted)]">Workspace v1.0</p>
           </div>
         )}
       </div>

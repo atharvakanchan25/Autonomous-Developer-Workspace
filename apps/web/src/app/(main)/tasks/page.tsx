@@ -94,11 +94,11 @@ export default function TasksPage() {
   return (
     <PageShell>
       {/* Top bar */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700 bg-[#1a1f2e] px-8">
+      <header className="app-topbar flex h-20 shrink-0 items-center justify-between px-8">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-medium text-gray-100">Tasks</h1>
+          <h1 className="app-title text-2xl font-semibold text-gray-100">Tasks</h1>
           {activeProject && (
-            <span className="rounded-full bg-gray-800 px-2.5 py-0.5 text-xs text-gray-400">
+            <span className="app-chip rounded-full px-2.5 py-1 text-xs">
               {activeProject.name}
             </span>
           )}
@@ -107,15 +107,15 @@ export default function TasksPage() {
           <select
             value={projectIdParam}
             onChange={handleProjectFilter}
-            className="rounded-lg border border-gray-700 bg-[#1a1f2e] px-3 py-1.5 text-xs text-gray-300 focus:border-indigo-500 focus:outline-none"
+            className="app-input rounded-2xl px-3.5 py-2 text-xs"
           >
             <option value="">All projects</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <button
             onClick={() => setShowForm((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
-              showForm ? "bg-gray-800 text-gray-300" : "bg-indigo-600 text-white hover:bg-indigo-700"
+            className={`flex items-center gap-1.5 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
+              showForm ? "app-button-secondary" : "app-button-primary"
             }`}
           >
             {showForm ? "Cancel" : "+ New task"}
@@ -133,7 +133,7 @@ export default function TasksPage() {
             animate="visible"
           >
             {ALL_STATUSES.map((s) => (
-              <motion.div key={s} variants={fadeUp} className="rounded-lg border border-gray-700 bg-[#1a1f2e] px-4 py-3 text-center shadow-sm">
+              <motion.div key={s} variants={fadeUp} className="app-panel rounded-[24px] px-4 py-4 text-center">
                 <p className="text-lg font-semibold text-gray-100">{counts[s]}</p>
                 <p className="text-[11px] text-gray-400">{s.replace("_", " ")}</p>
               </motion.div>
@@ -146,20 +146,20 @@ export default function TasksPage() {
         {showForm && (
           <motion.form
             onSubmit={handleCreate}
-            className="mb-6 overflow-hidden rounded-xl border border-gray-700 bg-[#1a1f2e] p-6 shadow-sm"
+            className="app-panel mb-6 overflow-hidden rounded-[28px] p-6"
             initial={{ opacity: 0, height: 0, marginBottom: 0 }}
             animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
             transition={{ duration: duration.standard, ease: ease.enter }}
           >
-            <h2 className="mb-5 text-sm font-semibold text-gray-100">New task</h2>
+            <h2 className="app-title mb-5 text-xl font-semibold text-gray-100">New task</h2>
             <div className="mb-4">
               <label className="mb-1.5 block text-xs font-medium text-gray-400">Title <span className="text-red-400">*</span></label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Task title"
-                className="w-full rounded-lg border border-gray-700 bg-[#0f1419] px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-900/50"
+                className="app-input w-full rounded-2xl px-3.5 py-3 text-sm"
               />
             </div>
             <div className="mb-4">
@@ -169,7 +169,7 @@ export default function TasksPage() {
                 value={taskDesc}
                 onChange={(e) => setTaskDesc(e.target.value)}
                 placeholder="Optional description"
-                className="w-full resize-none rounded-lg border border-gray-700 bg-[#0f1419] px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-900/50"
+                className="app-input w-full resize-none rounded-2xl px-3.5 py-3 text-sm"
               />
             </div>
             <div className="mb-5">
@@ -177,7 +177,7 @@ export default function TasksPage() {
               <select
                 value={taskProjectId}
                 onChange={(e) => setTaskProjectId(e.target.value)}
-                className="w-full rounded-lg border border-gray-700 bg-[#0f1419] px-3.5 py-2.5 text-sm text-gray-300 focus:border-indigo-500 focus:outline-none"
+                className="app-input w-full rounded-2xl px-3.5 py-3 text-sm"
               >
                 <option value="">Select a project</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -187,7 +187,7 @@ export default function TasksPage() {
             <motion.button
               type="submit"
               disabled={creating || !title.trim() || !taskProjectId}
-              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              className="app-button-primary rounded-2xl px-5 py-3 text-sm font-semibold disabled:opacity-50"
               whileTap={buttonTap}
               transition={{ duration: duration.fast }}
             >
@@ -205,14 +205,14 @@ export default function TasksPage() {
             Loading tasks…
           </div>
         ) : tasks.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-700 py-16 text-center">
+          <div className="app-empty rounded-[28px] py-16 text-center">
             <p className="text-sm text-gray-500">No tasks found.</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-gray-700 bg-[#1a1f2e] shadow-sm">
+          <div className="app-panel overflow-hidden rounded-[28px]">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-700 bg-gray-800/50">
+                <tr className="border-b border-white/10 bg-white/5">
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-400">#</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-400">Title</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-400">Project</th>
@@ -221,13 +221,13 @@ export default function TasksPage() {
                 </tr>
               </thead>
               <motion.tbody
-                className="divide-y divide-gray-700"
+                className="divide-y divide-white/10"
                 variants={staggerContainer}
                 initial="hidden"
                 animate="visible"
               >
                 {tasks.map((task) => (
-                  <motion.tr key={task.id} variants={fadeUp} className="transition-colors hover:bg-gray-800/50">
+                  <motion.tr key={task.id} variants={fadeUp} className="transition-colors hover:bg-white/5">
                     <td className="px-5 py-3.5 text-xs text-gray-500">{task.order}</td>
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-gray-100">{task.title}</p>
@@ -244,7 +244,7 @@ export default function TasksPage() {
                         value={task.status}
                         onChange={(e) => handleStatusChange(task, e.target.value as TaskStatus)}
                         disabled={!isAdmin && task.ownerId !== user?.uid}
-                        className="rounded-md border border-gray-700 bg-[#0f1419] px-2 py-1 text-xs text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                        className="app-input rounded-xl px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
                         title={!isAdmin && task.ownerId !== user?.uid ? "Only admins can update other users' tasks" : undefined}
                       >
                         {ALL_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}

@@ -52,8 +52,8 @@ export default function HomePage() {
 
   return (
     <PageShell>
-      <header className="flex h-14 shrink-0 items-center border-b border-gray-700 bg-[#1a1f2e] px-8">
-        <h1 className="text-sm font-medium text-gray-100">Home</h1>
+      <header className="app-topbar flex h-20 shrink-0 items-center px-8">
+        <h1 className="app-title text-2xl font-semibold text-gray-100">Home</h1>
       </header>
 
       <main className="flex-1 px-8 py-10">
@@ -64,15 +64,15 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: duration.slow, ease: ease.enter }}
           >
-            <h2 className="mb-2 text-2xl font-semibold text-gray-100">Start a new project</h2>
-            <p className="text-sm text-gray-400">
+            <h2 className="app-title mb-2 text-4xl font-semibold text-gray-100">Start a new project</h2>
+            <p className="max-w-xl text-sm leading-7 text-[var(--text-secondary)]">
               Describe what you want to build. The AI will generate a structured task plan and dependency graph.
             </p>
           </motion.div>
 
           <motion.form
             onSubmit={handleGenerate}
-            className="mb-12"
+            className="app-panel mb-12 rounded-[30px] p-6"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: duration.slow, ease: ease.enter, delay: 0.06 }}
@@ -82,7 +82,7 @@ export default function HomePage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="e.g. Build a REST API for a task management app with user authentication, CRUD operations, and JWT tokens..."
-              className="w-full resize-none rounded-lg border border-gray-700 bg-[#1a1f2e] px-4 py-3 text-sm text-gray-100 placeholder-gray-500 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-900/50"
+              className="app-input w-full resize-none rounded-[24px] px-5 py-4 text-sm shadow-sm"
             />
             <AnimatePresence>
               {submitError && (
@@ -98,14 +98,13 @@ export default function HomePage() {
               )}
             </AnimatePresence>
             <div className="mt-3 flex items-center justify-between">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[var(--text-muted)]">
                 {description.length > 0 ? `${description.length} characters` : "Be as specific as possible"}
               </p>
               <motion.button
                 type="submit"
                 disabled={submitting || !description.trim()}
-                className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                whileHover={{ backgroundColor: "#4f46e5" }}
+                className="app-button-primary flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 whileTap={buttonTap}
                 transition={{ duration: duration.fast }}
               >
@@ -127,8 +126,8 @@ export default function HomePage() {
             transition={{ duration: duration.slow, ease: ease.enter, delay: 0.12 }}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-gray-300">Recent projects</h3>
-              <Link href="/projects" className="text-xs text-indigo-400 hover:text-indigo-300">
+              <h3 className="text-sm font-medium text-gray-200">Recent projects</h3>
+              <Link href="/projects" className="text-xs text-[var(--accent)] hover:text-white">
                 View all
               </Link>
             </div>
@@ -140,7 +139,7 @@ export default function HomePage() {
               </div>
             ) : projects.length === 0 ? (
               <motion.div
-                className="rounded-lg border border-dashed border-gray-700 py-10 text-center"
+                className="app-empty rounded-[24px] py-10 text-center"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: duration.standard }}
@@ -149,7 +148,7 @@ export default function HomePage() {
               </motion.div>
             ) : (
               <motion.ul
-                className="divide-y divide-gray-700 overflow-hidden rounded-lg border border-gray-700 bg-[#1a1f2e] shadow-sm"
+                className="app-panel divide-y divide-white/10 overflow-hidden rounded-[24px]"
                 variants={staggerContainer}
                 initial="hidden"
                 animate="visible"
@@ -158,7 +157,7 @@ export default function HomePage() {
                   <motion.li key={p.id} variants={fadeUp}>
                     <Link
                       href={`/graph?projectId=${p.id}`}
-                      className="flex items-center justify-between px-5 py-3.5 transition-colors hover:bg-gray-800/50"
+                      className="flex items-center justify-between px-5 py-4 transition-colors hover:bg-white/5"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-100">{p.name}</p>
@@ -170,8 +169,8 @@ export default function HomePage() {
                         <span className="text-xs text-gray-500">
                           {p._count?.tasks ?? 0} task{p._count?.tasks !== 1 ? "s" : ""}
                         </span>
-                        <span className="text-xs text-gray-600">{timeAgo(p.updatedAt)}</span>
-                        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5 text-gray-600">
+                        <span className="text-xs text-[var(--text-muted)]">{timeAgo(p.updatedAt)}</span>
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5 text-[var(--text-muted)]">
                           <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" clipRule="evenodd" />
                         </svg>
                       </div>

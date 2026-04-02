@@ -27,11 +27,11 @@ export function ProjectSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`rounded-lg border border-gray-700 bg-[#1a1f2e] px-3 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-800/50 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-900/50 transition-colors [&>option]:bg-[#1a1f2e] [&>option]:text-gray-300 ${className}`}
+      className={`app-input rounded-2xl px-3.5 py-2 text-xs font-medium hover:bg-white/5 [&>option]:bg-[#0d1823] [&>option]:text-gray-200 ${className}`}
     >
-      <option value="" className="bg-[#1a1f2e] text-gray-300">{placeholder}</option>
+      <option value="" className="bg-[#0d1823] text-gray-200">{placeholder}</option>
       {projects.map((p) => (
-        <option key={p.id} value={p.id} className="bg-[#1a1f2e] text-gray-300">{p.name}</option>
+        <option key={p.id} value={p.id} className="bg-[#0d1823] text-gray-200">{p.name}</option>
       ))}
     </select>
   );

@@ -10,7 +10,7 @@ import { pageEnter } from "@/lib/motion";
 export function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
-      className="flex h-full flex-col overflow-y-auto"
+      className="scrollbar-thin flex h-full flex-col overflow-y-auto"
       variants={pageEnter}
       initial="hidden"
       animate="visible"

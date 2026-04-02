@@ -98,14 +98,14 @@ export default function ObservePage() {
 
   return (
     <PageShell>
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700 bg-[#1a1f2e] px-8">
+      <header className="app-topbar flex h-20 shrink-0 items-center justify-between px-8">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-medium text-gray-100">Observability</h1>
+          <h1 className="app-title text-2xl font-semibold text-gray-100">Observability</h1>
           <ProjectSelect
             value={selectedProjectId}
             onChange={handleProjectChange}
             placeholder="All Projects (Total)"
-            className="border-gray-700 bg-[#252d3d] text-gray-300 text-xs"
+            className="text-xs"
           />
           <span className="flex items-center gap-1.5 text-xs text-gray-500">
             <motion.span
@@ -129,7 +129,7 @@ export default function ObservePage() {
           <motion.button
             onClick={() => fetchAll()}
             disabled={loading}
-            className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-800/50 disabled:opacity-40"
+            className="app-button-secondary rounded-2xl px-3.5 py-2 text-xs disabled:opacity-40"
             whileTap={buttonTap}
             transition={{ duration: duration.fast }}
           >
@@ -170,7 +170,7 @@ export default function ObservePage() {
         </motion.div>
 
         {/* Tabs — layoutId sliding underline */}
-        <div className="mb-6 flex gap-1 border-b border-gray-700">
+        <div className="mb-6 flex gap-1 border-b border-white/10">
           {TABS.map(({ id, label }) => {
             const restricted = id === "logs" && !isAdmin;
             return (
@@ -202,7 +202,7 @@ export default function ObservePage() {
                 )}
                 {tab === id && !restricted && (
                   <motion.span
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--accent)]"
                     layoutId="tab-underline"
                     transition={{ duration: duration.standard, ease: ease.primary }}
                   />
