@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
-import type { Project } from "@/types";
+import type { Project, Deployment } from "@/types";
 import { PageShell } from "@/components/PageShell";
 import { duration, ease, cardHover, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
 
@@ -31,13 +31,30 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [deployedIds, setDeployedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try { setProjects(await api.projects.list()); }
-    catch (err) { setError(err instanceof Error ? err.message : "Failed to load projects"); }
-    finally { setLoading(false); }
+    try {
+      const projs = await api.projects.list();
+      setProjects(projs);
+      // Fetch deployments for each project in parallel to find deployed ones
+      const results = await Promise.allSettled(
+        projs.map((p) => api.cicd.list(p.id))
+      );
+      const ids = new Set<string>();
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled" && r.value.some((d: Deployment) => d.status === "SUCCESS")) {
+          ids.add(projs[i].id);
+        }
+      });
+      setDeployedIds(ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load projects");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -178,9 +195,17 @@ export default function ProjectsPage() {
                       <path d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
                     </svg>
                   </div>
-                  <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[11px] font-medium text-gray-400">
-                    {p._count?.tasks ?? 0} task{p._count?.tasks !== 1 ? "s" : ""}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {deployedIds.has(p.id) && (
+                      <span className="flex items-center gap-1 rounded-full bg-green-900/50 border border-green-800/50 px-2 py-0.5 text-[10px] font-medium text-green-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                        Deployed
+                      </span>
+                    )}
+                    <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[11px] font-medium text-gray-400">
+                      {p._count?.tasks ?? 0} task{p._count?.tasks !== 1 ? "s" : ""}
+                    </span>
+                  </div>
                 </div>
                 <h3 className="mb-1 truncate text-sm font-semibold text-gray-100">{p.name}</h3>
                 {p.description ? (

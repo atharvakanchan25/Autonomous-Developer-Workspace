@@ -34,7 +34,7 @@ class PipelineStagePayload(BaseModel):
 
 class CicdStageLog(BaseModel):
     stage: str
-    status: Literal["running", "passed", "failed", "skipped"]
+    status: Literal["pending", "running", "passed", "failed", "skipped"]
     durationMs: Optional[int] = None
     detail: Optional[str] = None
 

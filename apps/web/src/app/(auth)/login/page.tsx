@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { duration, ease, buttonTap, fadeUp } from "@/lib/motion";
 import {
@@ -165,6 +165,8 @@ function parseFirebaseError(err: unknown): string {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextUrl = searchParams.get("next") ?? "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -189,7 +191,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/home");
+      router.push(nextUrl);
     } catch (err) {
       setErrors({ form: parseFirebaseError(err) });
     } finally {
@@ -202,7 +204,7 @@ export default function LoginPage() {
     setErrors({});
     try {
       await signInWithPopup(auth, provider === "google" ? googleProvider : githubProvider);
-      router.push("/home");
+      router.push(nextUrl);
     } catch (err) {
       const msg = parseFirebaseError(err);
       if (msg) setErrors({ form: msg });

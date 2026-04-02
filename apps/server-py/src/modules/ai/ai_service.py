@@ -14,6 +14,49 @@ import re
 
 router = APIRouter()
 
+_WEB_KEYWORDS = {
+    "todo", "calculator", "landing page", "portfolio", "quiz", "game",
+    "weather", "clock", "timer", "stopwatch", "form", "survey", "dashboard",
+    "ui", "frontend", "webpage", "website", "html", "css", "browser",
+    "interactive", "animation", "gallery", "slider", "modal", "navbar",
+}
+
+
+def _is_web_project(description: str) -> bool:
+    desc_lower = description.lower()
+    return any(kw in desc_lower for kw in _WEB_KEYWORDS)
+
+
+_SYSTEM_PROMPT_WEB = """You are a senior software architect. Your job is to break down a frontend web project into a structured execution plan.
+
+This is a FRONTEND/WEB project. The output MUST be a single self-contained index.html file.
+
+You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
+
+The JSON must conform exactly to this structure:
+{
+  "language": "html",
+  "framework": "",
+  "tasks": [
+    {
+      "key": "string (short unique snake_case identifier)",
+      "title": "string (concise task title, max 80 chars)",
+      "description": "string — MUST end with: Output: a single self-contained index.html file with all CSS in <style> and all JS in <script> tags. No imports, no npm, no build tools.",
+      "order": number,
+      "dependsOn": ["key1", "key2"]
+    }
+  ]
+}
+
+CRITICAL rules for web projects:
+- language MUST be "html", framework MUST be empty string.
+- Every task description MUST specify output is a single index.html.
+- Generate 3 to 6 tasks max — each task builds on the previous index.html.
+- The FINAL task must produce the complete, polished index.html.
+- NO React, NO Vue, NO Vite, NO npm, NO Node.js, NO imports.
+- Task rules: unique snake_case keys, valid DAG, no cycles."""
+
+
 _SYSTEM_PROMPT = """You are a senior software architect. Your job is to break down a software project description into a structured execution plan AND choose the single best technology stack for it.
 
 You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
@@ -34,15 +77,12 @@ The JSON must conform exactly to this structure:
 }
 
 Language selection rules:
-- Simple CRUD app / task manager → python (FastAPI) or javascript (React)
-- Web app with UI → javascript or typescript with React
-- REST API / backend service → python (FastAPI) or javascript (Express) or go (Gin)
+- REST API / backend service → python (FastAPI) or go (Gin)
 - CLI tool / script → python
-- Real-time app / chat → javascript/typescript with Node.js
 - Data science / ML → python
 - System programming / performance critical → go or rust
 - Mobile app → swift (iOS) or kotlin (Android)
-- NEVER default to python for frontend or UI projects
+- NEVER use React, Vite, or Node.js — if a project needs a UI, use python (FastAPI with Jinja2).
 
 Task rules:
 - Generate between 4 and 10 tasks.
@@ -51,39 +91,57 @@ Task rules:
 - The dependency graph must be a valid DAG — no cycles.
 - Order tasks so dependencies always have a lower order number than their dependents."""
 
-_FEW_SHOT_EXAMPLE = {
+_FEW_SHOT_EXAMPLE_WEB = {
     "role": "user",
     "content": (
         "Project description: Build a simple to-do list web app\n\n"
-        + json.dumps({"language": "javascript", "framework": "React", "tasks": [
-            {"key": "setup", "title": "Initialise React project",
-             "description": "Create React app with Vite, configure ESLint and folder structure.",
+        + json.dumps({"language": "html", "framework": "", "tasks": [
+            {"key": "structure", "title": "HTML structure and base styles",
+             "description": "Create the base HTML skeleton with input field, add button, and task list container. Output: a single self-contained index.html file with all CSS in <style> and all JS in <script> tags. No imports, no npm, no build tools.",
              "order": 1, "dependsOn": []},
-            {"key": "task_model", "title": "Define task data model and state",
-             "description": "Define the Task shape and set up useState/useReducer for the task list.",
+            {"key": "add_delete", "title": "Add and delete task functionality",
+             "description": "Implement JS to add new tasks to the list and delete them with a button. Output: a single self-contained index.html file with all CSS in <style> and all JS in <script> tags. No imports, no npm, no build tools.",
+             "order": 2, "dependsOn": ["structure"]},
+            {"key": "complete_persist", "title": "Complete toggle and localStorage persistence",
+             "description": "Add strike-through toggle for completed tasks and persist the list to localStorage. Output: a single self-contained index.html file with all CSS in <style> and all JS in <script> tags. No imports, no npm, no build tools.",
+             "order": 3, "dependsOn": ["add_delete"]},
+        ]})
+    ),
+}
+
+_FEW_SHOT_EXAMPLE = {
+    "role": "user",
+    "content": (
+        "Project description: Build a REST API for a blog with posts and comments\n\n"
+        + json.dumps({"language": "python", "framework": "FastAPI", "tasks": [
+            {"key": "setup", "title": "Initialise project and install dependencies",
+             "description": "Create the Python project, configure virtual environment, and install FastAPI and core dependencies.",
+             "order": 1, "dependsOn": []},
+            {"key": "models", "title": "Define Pydantic data models",
+             "description": "Define Pydantic models for Post and Comment with appropriate fields.",
              "order": 2, "dependsOn": ["setup"]},
-            {"key": "task_list", "title": "Build TaskList and TaskItem components",
-             "description": "Render the list of tasks with completed/pending styling.",
-             "order": 3, "dependsOn": ["task_model"]},
-            {"key": "add_task", "title": "Implement add task form",
-             "description": "Input field and button to add new tasks to the list.",
-             "order": 4, "dependsOn": ["task_model"]},
-            {"key": "actions", "title": "Implement delete and complete toggle",
-             "description": "Add handlers to mark tasks complete and delete them.",
-             "order": 5, "dependsOn": ["task_list", "add_task"]},
-            {"key": "persist", "title": "Persist tasks to localStorage",
-             "description": "Save and load tasks from localStorage so they survive page refresh.",
-             "order": 6, "dependsOn": ["actions"]},
+            {"key": "posts_api", "title": "Implement Posts CRUD endpoints",
+             "description": "Build GET /posts, POST /posts, GET /posts/{id}, PUT /posts/{id}, DELETE /posts/{id}.",
+             "order": 3, "dependsOn": ["models"]},
+            {"key": "comments_api", "title": "Implement Comments endpoints",
+             "description": "Build GET /posts/{id}/comments and POST /posts/{id}/comments.",
+             "order": 4, "dependsOn": ["models"]},
+            {"key": "error_handling", "title": "Add global error handling",
+             "description": "Implement centralised FastAPI exception handler and input validation.",
+             "order": 5, "dependsOn": ["posts_api", "comments_api"]},
         ]})
     ),
 }
 
 
 async def _call_llm(description: str) -> tuple[str, int]:
+    web = _is_web_project(description)
+    system_prompt = _SYSTEM_PROMPT_WEB if web else _SYSTEM_PROMPT
+    few_shot = _FEW_SHOT_EXAMPLE_WEB if web else _FEW_SHOT_EXAMPLE
     result = await call_llm(
         messages=[
-            LlmMessage(role="system", content=_SYSTEM_PROMPT),
-            LlmMessage(role="user", content=_FEW_SHOT_EXAMPLE["content"]),
+            LlmMessage(role="system", content=system_prompt),
+            LlmMessage(role="user", content=few_shot["content"]),
             LlmMessage(role="user", content=f"Project description: {description.strip()}"),
         ],
         max_tokens=2048,

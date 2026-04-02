@@ -48,6 +48,17 @@ class TestGeneratorAgent:
     async def run(self, ctx: AgentContext) -> AgentResult:
         language = ctx.language
         framework = ctx.framework
+
+        # No unit tests for HTML/CSS/JS web projects
+        if language.lower() == "html":
+            return AgentResult(
+                agentType=self.type,
+                summary=f'Skipped tests for web project "{ctx.taskTitle}" (HTML/CSS/JS)',
+                artifacts=[],
+                rawLlmOutput="",
+                tokensUsed=0,
+            )
+
         test_framework = TEST_FRAMEWORKS.get(language, "appropriate testing framework")
         test_dir = TEST_DIRS.get(language, "tests")
         framework_hint = f" using {framework}" if framework else ""

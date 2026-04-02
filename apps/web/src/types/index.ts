@@ -175,7 +175,7 @@ export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 
 export interface CicdStageLog {
   stage: string;
-  status: "running" | "passed" | "failed" | "skipped";
+  status: "pending" | "running" | "passed" | "failed" | "skipped";
   durationMs?: number;
   detail?: string;
 }
