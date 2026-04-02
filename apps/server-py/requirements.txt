@@ -10,3 +10,4 @@ slowapi
 python-multipart
 mcp[cli]>=1.0.0
 langgraph>=0.2.0
+httpx

@@ -11,44 +11,21 @@ export interface AuthUserWithRole extends User {
   role: UserRole;
 }
 
-export async function fetchRole(firebaseUser: User, retries = 3): Promise<UserRole> {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      // Force refresh token to ensure backend gets latest auth state
-      const token = await firebaseUser.getIdToken(true);
-      const res = await fetch(`${webConfig.apiUrl}/api/admin/users/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store', // Prevent caching
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const role = data.role === "admin" ? "admin" : "user";
-        console.log(`[useAuth] Attempt ${attempt}: User ${firebaseUser.email} has role: ${role}`);
-        return role;
-      }
-
-      console.warn(`[useAuth] Attempt ${attempt}: /users/me returned ${res.status}`);
-      
-      // If not the last attempt, wait before retrying
-      if (attempt < retries) {
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-      }
-    } catch (err) {
-      console.error(`[useAuth] Attempt ${attempt} failed:`, err);
-      if (attempt < retries) {
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-      }
+async function fetchRole(firebaseUser: User): Promise<UserRole> {
+  try {
+    const token = await firebaseUser.getIdToken(true);
+    const res = await fetch(`${webConfig.apiUrl}/api/admin/users/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.role === "admin" ? "admin" : "user";
     }
+  } catch (err) {
+    console.error("[useAuth] fetchRole failed:", err);
   }
-
-  console.error(`[useAuth] All ${retries} attempts failed, defaulting to 'user' role`);
   return "user";
-}
-
-export async function getPostLoginRoute(firebaseUser: User): Promise<"/home" | "/admin"> {
-  const role = await fetchRole(firebaseUser);
-  return role === "admin" ? "/admin" : "/home";
 }
 
 export function useAuth() {
@@ -73,13 +50,11 @@ export function useAuth() {
     return () => unsub();
   }, [resolveUser]);
 
-  // Call this after any action that might change the role
   const refetchRole = useCallback(async () => {
     const firebaseUser = auth.currentUser;
     if (!firebaseUser) return;
-    const role = await fetchRole(firebaseUser);
-    setUser(prev => prev ? { ...prev, role } : null);
-  }, []);
+    await resolveUser(firebaseUser);
+  }, [resolveUser]);
 
   const hasRole = (minimum: UserRole): boolean => {
     if (!user) return false;

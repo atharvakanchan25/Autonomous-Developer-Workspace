@@ -21,7 +21,7 @@ interface AuditLog {
   email: string;
   role: string;
   action: string;
-  meta: Record<string, string>;
+  meta: Record<string, any>;
   createdAt: string;
 }
 
@@ -31,7 +31,7 @@ interface UserActivity {
   role: string;
   createdAt: string;
   stats: { projectCount: number; taskCount: number; actionCount: number };
-  activity: { id: string; action: string; meta: Record<string, string>; createdAt: string }[];
+  activity: { id: string; action: string; meta: Record<string, any>; createdAt: string }[];
 }
 
 interface UserProjects {
@@ -63,6 +63,11 @@ interface TokenCall {
   tokensUsed: number;
   status: string;
   createdAt: string;
+}
+
+interface AdminProject extends Project {
+  ownerEmail: string;
+  taskCount: number;
 }
 
 const ACTION_META: Record<string, { label: string; color: string; icon: string }> = {
@@ -105,12 +110,6 @@ function timeAgo(dateStr: string) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
-}
-
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 const SUPERUSER_EMAIL = "aryankanchan@adw.com";
@@ -316,13 +315,8 @@ export default function AdminPage() {
 
   const filteredLogs = auditFilter === "ALL" ? auditLogs : auditLogs.filter((l) => l.action === auditFilter);
   const uniqueActions = ["ALL", ...Array.from(new Set(auditLogs.map((l) => l.action)))];
-  const actionCountByUser = auditLogs.reduce<Record<string, number>>((acc, l) => {
-    acc[l.userId] = (acc[l.userId] ?? 0) + 1;
-    return acc;
-  }, {});
-  const admins = users
-    .filter((u) => u.role === "admin")
-    .sort((a, b) => a.email.localeCompare(b.email));
+  const totalTokens = tokenUsage.reduce((sum, u) => sum + u.totalTokens, 0);
+  const exceededCount = tokenUsage.filter((u) => u.limitExceeded).length;
 
   if (loading || !user || !hasRole("admin")) {
     return (
@@ -352,8 +346,31 @@ export default function AdminPage() {
             >
               {user.email === SUPERUSER_EMAIL ? "SUPERUSER" : "ADMIN"}
             </span>
+            <button
+              onClick={() => { setDataLoaded(false); }}
+              disabled={loadingData}
+              className="ml-3 rounded border border-gray-600 bg-gray-800 px-3 py-1 text-xs text-gray-300 hover:bg-gray-700 disabled:opacity-50"
+            >
+              {loadingData ? "Refreshing…" : "↻ Refresh"}
+            </button>
           </div>
         </div>
+        {!loadingData && (
+          <div className="mt-4 grid grid-cols-5 gap-3">
+            {[
+              { label: "Total Users", value: users.length, color: "text-indigo-400" },
+              { label: "Admins", value: users.filter((u) => u.role === "admin").length, color: "text-yellow-400" },
+              { label: "Projects", value: projects.length, color: "text-emerald-400" },
+              { label: "Total Tokens Used", value: totalTokens.toLocaleString(), color: "text-purple-400" },
+              { label: "Limit Exceeded", value: exceededCount, color: exceededCount > 0 ? "text-red-400" : "text-gray-400" },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg border border-gray-700 bg-[#0f1419] px-4 py-3">
+                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className={`text-xl font-semibold ${s.color}`}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 border-b border-gray-700 bg-[#1a1f2e] px-6">
@@ -387,111 +404,493 @@ export default function AdminPage() {
           <div className="flex items-center justify-center py-12">
             <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
           </div>
+        ) : selectedUser ? (
+          <UserDetailView
+            user={selectedUser}
+            userTab={userTab}
+            setUserTab={setUserTab}
+            userActivity={userActivity}
+            userProjects={userProjects}
+            userTokens={userTokens}
+            userLoading={userLoading}
+            userError={userError}
+            onBack={() => setSelectedUser(null)}
+            onChangeRole={changeRole}
+            onDelete={deleteUser}
+            isSuperuser={isSuperuser}
+          />
         ) : tab === "users" ? (
-          <div className="overflow-hidden rounded-lg border border-gray-700 bg-[#1a1f2e]">
-            {users.length === 0 ? (
-              <p className="p-4 text-sm text-gray-400">No users found yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                  <thead className="bg-[#22283a]">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">User</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Role</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Joined</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Activity</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800">
-                    {users
-                      .slice()
-                      .sort((a, b) => a.email.localeCompare(b.email))
-                      .map((u) => (
-                        <tr key={u.uid} className="hover:bg-[#202638]">
-                          <td className="px-4 py-3">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-medium text-gray-100">{u.email}</span>
-                              <span className="text-xs text-gray-500">{u.uid}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${
-                                u.role === "admin"
-                                  ? "border-yellow-700 bg-yellow-900/30 text-yellow-400"
-                                  : "border-gray-700 bg-gray-800 text-gray-300"
-                              }`}
-                            >
-                              {u.role.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-300">{formatDate(u.createdAt)}</td>
-                          <td className="px-4 py-3 text-sm text-gray-400">{actionCountByUser[u.uid] ?? 0} actions</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <UsersTable users={users} onSelectUser={openUser} />
         ) : tab === "admins" ? (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
-              <p className="text-sm text-gray-300">Live admin accounts from the current backend role data.</p>
-              <p className="mt-1 text-xs text-gray-500">Admins are resolved in real time from `/api/admin/users` and your backend admin email rules.</p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {admins.length === 0 ? (
-                <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4 text-sm text-gray-400">
-                  No admins found.
-                </div>
-              ) : (
-                admins.map((adminUser) => (
-                  <div key={adminUser.uid} className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-100">{adminUser.email}</p>
-                        <p className="mt-1 text-xs text-gray-500">{adminUser.uid}</p>
-                      </div>
-                      <span className="rounded-full border border-yellow-700 bg-yellow-900/30 px-2 py-1 text-[10px] font-medium text-yellow-400">
-                        ADMIN
-                      </span>
-                    </div>
-                    <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-500">Joined</span>
-                        <span className="text-gray-300">{formatDate(adminUser.createdAt)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-500">Recent activity</span>
-                        <span className="text-gray-300">{actionCountByUser[adminUser.uid] ?? 0} actions</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-500">Status</span>
-                        <span className="text-emerald-400">Active</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          <AdminsTable users={users.filter(u => u.role === "admin")} onSelectUser={openUser} />
         ) : tab === "tokens" ? (
-          <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Token usage coming soon</p>
-          </div>
+          tokenUser ? (
+            <TokenCallsView
+              user={tokenUser}
+              calls={tokenCalls}
+              loading={tokenCallsLoading}
+              onBack={() => setTokenUser(null)}
+            />
+          ) : (
+            <TokenUsageTable usage={tokenUsage} onSelectUser={openTokenCalls} />
+          )
         ) : tab === "audit" ? (
-          <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Audit logs coming soon</p>
-          </div>
+          <AuditLogsTable
+            logs={filteredLogs}
+            filter={auditFilter}
+            setFilter={setAuditFilter}
+            uniqueActions={uniqueActions}
+          />
         ) : (
-          <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Projects coming soon</p>
-          </div>
+          <ProjectsTable projects={projects as AdminProject[]} onDelete={deleteProject} />
         )}
       </div>
     </div>
   );
 }
-  
+
+function UsersTable({ users, onSelectUser }: { users: User[]; onSelectUser: (u: User) => void }) {
+  return (
+    <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+      <table className="w-full">
+        <thead className="border-b border-gray-700 bg-[#0f1419]">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Email</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Role</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Created</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-700">
+          {users.map((u) => (
+            <tr key={u.id} className="hover:bg-gray-800/50">
+              <td className="px-4 py-3 text-sm text-gray-300">{u.email}</td>
+              <td className="px-4 py-3">
+                <span className={`rounded-full px-2 py-1 text-xs font-medium ${u.role === "admin" ? "bg-yellow-900/30 text-yellow-400" : "bg-gray-700 text-gray-300"}`}>
+                  {u.role}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(u.createdAt)}</td>
+              <td className="px-4 py-3 text-right">
+                <button onClick={() => onSelectUser(u)} className="text-sm text-indigo-400 hover:text-indigo-300">
+                  View Details →
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AdminsTable({ users, onSelectUser }: { users: User[]; onSelectUser: (u: User) => void }) {
+  return (
+    <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+      <table className="w-full">
+        <thead className="border-b border-gray-700 bg-[#0f1419]">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Email</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Created</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-700">
+          {users.map((u) => (
+            <tr key={u.id} className="hover:bg-gray-800/50">
+              <td className="px-4 py-3 text-sm text-gray-300">{u.email}</td>
+              <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(u.createdAt)}</td>
+              <td className="px-4 py-3 text-right">
+                <button onClick={() => onSelectUser(u)} className="text-sm text-indigo-400 hover:text-indigo-300">
+                  View Details →
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TokenUsageTable({ usage, onSelectUser }: { usage: TokenUsage[]; onSelectUser: (u: TokenUsage) => void }) {
+  return (
+    <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+      <table className="w-full">
+        <thead className="border-b border-gray-700 bg-[#0f1419]">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">User</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Total Tokens</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Calls</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Remaining</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Status</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-700">
+          {usage.map((u) => (
+            <tr key={u.uid} className="hover:bg-gray-800/50">
+              <td className="px-4 py-3 text-sm text-gray-300">{u.email}</td>
+              <td className="px-4 py-3 text-right text-sm font-mono text-gray-300">{u.totalTokens.toLocaleString()}</td>
+              <td className="px-4 py-3 text-right text-sm text-gray-400">{u.callCount}</td>
+              <td className="px-4 py-3 text-right text-sm font-mono text-gray-300">{u.remaining.toLocaleString()}</td>
+              <td className="px-4 py-3">
+                <span className={`rounded-full px-2 py-1 text-xs font-medium ${u.limitExceeded ? "bg-red-900/30 text-red-400" : "bg-green-900/30 text-green-400"}`}>
+                  {u.limitExceeded ? "Exceeded" : "OK"}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-right">
+                <button onClick={() => onSelectUser(u)} className="text-sm text-indigo-400 hover:text-indigo-300">
+                  View Calls →
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TokenCallsView({ user, calls, loading, onBack }: { user: TokenUsage; calls: TokenCall[]; loading: boolean; onBack: () => void }) {
+  return (
+    <div>
+      <button onClick={onBack} className="mb-4 text-sm text-indigo-400 hover:text-indigo-300">← Back to Token Usage</button>
+      <div className="mb-4 rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+        <h2 className="text-lg font-semibold text-gray-100">{user.email}</h2>
+        <div className="mt-2 grid grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs text-gray-400">Total Tokens</p>
+            <p className="text-xl font-mono text-gray-100">{user.totalTokens.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Calls</p>
+            <p className="text-xl font-mono text-gray-100">{user.callCount}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Remaining</p>
+            <p className="text-xl font-mono text-gray-100">{user.remaining.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Status</p>
+            <span className={`mt-1 inline-block rounded-full px-2 py-1 text-xs font-medium ${user.limitExceeded ? "bg-red-900/30 text-red-400" : "bg-green-900/30 text-green-400"}`}>
+              {user.limitExceeded ? "Exceeded" : "OK"}
+            </span>
+          </div>
+        </div>
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+          <table className="w-full">
+            <thead className="border-b border-gray-700 bg-[#0f1419]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Source</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Agent Type</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Tokens</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Time</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {calls.map((c) => (
+                <tr key={c.id} className="hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-sm text-gray-300">{c.source}</td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{c.agentType}</td>
+                  <td className="px-4 py-3 text-right text-sm font-mono text-gray-300">{c.tokensUsed.toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2 py-1 text-xs font-medium ${c.status === "success" ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
+                      {c.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(c.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuditLogsTable({ logs, filter, setFilter, uniqueActions }: { logs: AuditLog[]; filter: string; setFilter: (f: string) => void; uniqueActions: string[] }) {
+  return (
+    <div>
+      <div className="mb-4 flex gap-2">
+        {uniqueActions.map((a) => (
+          <button
+            key={a}
+            onClick={() => setFilter(a)}
+            className={`rounded px-3 py-1 text-xs font-medium ${filter === a ? "bg-indigo-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+          >
+            {a}
+          </button>
+        ))}
+      </div>
+      <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+        <table className="w-full">
+          <thead className="border-b border-gray-700 bg-[#0f1419]">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">User</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Action</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Details</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-700">
+            {logs.map((l) => {
+              const badge = actionBadge(l.action);
+              return (
+                <tr key={l.id} className="hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-sm text-gray-300">{l.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full border px-2 py-1 text-xs font-medium ${badge.color}`}>
+                      {badge.icon} {badge.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{metaSummary(l.action, l.meta)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(l.createdAt)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ProjectsTable({ projects, onDelete }: { projects: AdminProject[]; onDelete: (id: string, name: string) => void }) {
+  return (
+    <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+      <table className="w-full">
+        <thead className="border-b border-gray-700 bg-[#0f1419]">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Name</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Owner</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Tasks</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Created</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-700">
+          {projects.map((p) => (
+            <tr key={p.id} className="hover:bg-gray-800/50">
+              <td className="px-4 py-3 text-sm font-medium text-gray-100">{p.name}</td>
+              <td className="px-4 py-3 text-sm text-gray-400">{p.ownerEmail || "Unknown"}</td>
+              <td className="px-4 py-3 text-right text-sm text-gray-400">{p.taskCount || 0}</td>
+              <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(p.createdAt)}</td>
+              <td className="px-4 py-3 text-right">
+                <button onClick={() => onDelete(p.id, p.name)} className="text-sm text-red-400 hover:text-red-300">
+                  Delete
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function UserDetailView({
+  user,
+  userTab,
+  setUserTab,
+  userActivity,
+  userProjects,
+  userTokens,
+  userLoading,
+  userError,
+  onBack,
+  onChangeRole,
+  onDelete,
+  isSuperuser,
+}: {
+  user: User;
+  userTab: "overview" | "projects" | "activity" | "tokens";
+  setUserTab: (t: "overview" | "projects" | "activity" | "tokens") => void;
+  userActivity: UserActivity | null;
+  userProjects: UserProjects[];
+  userTokens: TokenCall[];
+  userLoading: boolean;
+  userError: string | null;
+  onBack: () => void;
+  onChangeRole: (uid: string, role: string) => void;
+  onDelete: (uid: string) => void;
+  isSuperuser: boolean;
+}) {
+  return (
+    <div>
+      <button onClick={onBack} className="mb-4 text-sm text-indigo-400 hover:text-indigo-300">← Back to Users</button>
+      <div className="mb-4 rounded-lg border border-gray-700 bg-[#1a1f2e] p-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-100">{user.email}</h2>
+            <p className="mt-1 text-sm text-gray-400">User ID: {user.uid}</p>
+            <span className={`mt-2 inline-block rounded-full px-2 py-1 text-xs font-medium ${user.role === "admin" ? "bg-yellow-900/30 text-yellow-400" : "bg-gray-700 text-gray-300"}`}>
+              {user.role}
+            </span>
+          </div>
+          {isSuperuser && (
+            <div className="flex gap-2">
+              <select
+                value={user.role}
+                onChange={(e) => onChangeRole(user.uid, e.target.value)}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1 text-sm text-gray-300"
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button onClick={() => onDelete(user.uid)} className="rounded bg-red-600 px-3 py-1 text-sm text-white hover:bg-red-700">
+                Delete User
+              </button>
+            </div>
+          )}
+        </div>
+        {userActivity && (
+          <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-700 pt-4">
+            <div>
+              <p className="text-xs text-gray-400">Projects</p>
+              <p className="text-2xl font-semibold text-gray-100">{userActivity.stats.projectCount}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Tasks</p>
+              <p className="text-2xl font-semibold text-gray-100">{userActivity.stats.taskCount}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Actions</p>
+              <p className="text-2xl font-semibold text-gray-100">{userActivity.stats.actionCount}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4 flex gap-2 border-b border-gray-700">
+        {(["overview", "projects", "activity", "tokens"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setUserTab(t)}
+            className={`px-4 py-2 text-sm font-medium capitalize ${userTab === t ? "border-b-2 border-indigo-500 text-indigo-400" : "text-gray-500 hover:text-gray-300"}`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {userLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+        </div>
+      ) : userError ? (
+        <div className="rounded-lg border border-red-700 bg-red-900/20 p-4 text-sm text-red-400">{userError}</div>
+      ) : userTab === "overview" ? (
+        <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-6">
+          <h3 className="mb-4 text-lg font-semibold text-gray-100">User Information</h3>
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-gray-400">Email</p>
+              <p className="text-sm text-gray-200">{user.email}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">User ID</p>
+              <p className="font-mono text-sm text-gray-200">{user.uid}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Role</p>
+              <p className="text-sm text-gray-200">{user.role}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Created At</p>
+              <p className="text-sm text-gray-200">{new Date(user.createdAt).toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      ) : userTab === "projects" ? (
+        <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+          <table className="w-full">
+            <thead className="border-b border-gray-700 bg-[#0f1419]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Description</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Tasks</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Created</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {userProjects.map((p) => (
+                <tr key={p.id} className="hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-100">{p.name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{p.description}</td>
+                  <td className="px-4 py-3 text-right text-sm text-gray-400">{p.taskCount}</td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(p.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : userTab === "activity" ? (
+        <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+          <table className="w-full">
+            <thead className="border-b border-gray-700 bg-[#0f1419]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Action</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Details</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Time</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {userActivity?.activity.map((a) => {
+                const badge = actionBadge(a.action);
+                return (
+                  <tr key={a.id} className="hover:bg-gray-800/50">
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full border px-2 py-1 text-xs font-medium ${badge.color}`}>
+                        {badge.icon} {badge.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-400">{metaSummary(a.action, a.meta)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(a.createdAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-gray-700 bg-[#1a1f2e]">
+          <table className="w-full">
+            <thead className="border-b border-gray-700 bg-[#0f1419]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Source</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Agent Type</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400">Tokens</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Time</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {userTokens.map((t) => (
+                <tr key={t.id} className="hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-sm text-gray-300">{t.source}</td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{t.agentType}</td>
+                  <td className="px-4 py-3 text-right text-sm font-mono text-gray-300">{t.tokensUsed.toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2 py-1 text-xs font-medium ${t.status === "success" ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
+                      {t.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{timeAgo(t.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

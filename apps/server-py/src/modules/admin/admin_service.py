@@ -6,6 +6,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from firebase_admin import auth as firebase_auth
 
 from src.auth.auth import AuthUser, get_current_user, require_role, log_action
 from src.core.errors import not_found
@@ -156,13 +157,18 @@ def list_users(admin: AuthUser = Depends(require_role("admin"))):
 
 @router.patch("/users/{uid}/role")
 async def update_user_role(uid: str, body: SetRoleRequest, admin: AuthUser = Depends(require_role("admin"))):
-    """Change a user's role."""
+    """Set role as a Firebase Custom Claim + sync Firestore."""
     doc = db.collection("users").document(uid).get()
     if not doc.exists:
         raise not_found("User")
 
+    # Write the custom claim into Firebase Auth — this is the source of truth
+    firebase_auth.set_custom_user_claims(uid, {"role": body.role})
+
+    # Keep Firestore in sync for admin queries
     db.collection("users").document(uid).update({"role": body.role, "updatedAt": now_iso()})
     await log_action(admin, "ROLE_CHANGE", {"targetUser": uid, "newRole": body.role})
+    logger.info(f"Role updated: uid={uid} role={body.role} by {admin.email}")
     return {"uid": uid, "role": body.role}
 
 

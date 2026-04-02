@@ -132,10 +132,17 @@ export const api = {
     },
   },
   cicd: {
-    trigger: (projectId: string, taskId?: string) =>
+    trigger: (projectId: string, taskId?: string, creds?: { githubToken: string; vercelToken: string; repoName: string; vercelOrgId?: string }) =>
       request<{ message: string }>("/api/cicd/deploy", {
         method: "POST",
-        body: JSON.stringify({ projectId, taskId }),
+        body: JSON.stringify({
+          projectId,
+          taskId,
+          githubToken: creds?.githubToken ?? "",
+          vercelToken: creds?.vercelToken ?? "",
+          repoName: creds?.repoName ?? "",
+          vercelOrgId: creds?.vercelOrgId ?? null,
+        }),
       }),
     list: (projectId: string) =>
       request<Deployment[]>(`/api/cicd/deployments?projectId=${projectId}`),
@@ -159,6 +166,33 @@ export const api = {
       }),
   },
   admin: {
-    projects: () => request<Array<Project & { ownerEmail: string }>>("/api/admin/projects"),
+    projects: () => request<Array<Project & { ownerEmail: string; taskCount: number }>>("/api/admin/projects"),
+    users: () => request<Array<{ id: string; uid: string; email: string; role: string; createdAt: string }>>("/api/admin/users"),
+    auditLogs: (limit?: number, userId?: string) => {
+      const params = new URLSearchParams();
+      if (limit) params.set("limit", limit.toString());
+      if (userId) params.set("userId", userId);
+      return request<Array<{ id: string; userId: string; email: string; role: string; action: string; meta: Record<string, any>; createdAt: string }>>(
+        `/api/admin/audit-logs${params.toString() ? `?${params.toString()}` : ""}`
+      );
+    },
+    tokenUsage: () => request<Array<{ uid: string; email: string; role: string; totalTokens: number; callCount: number; lastCallAt: string | null; limit: number; remaining: number; limitExceeded: boolean }>>("/api/admin/token-usage"),
+    userTokenCalls: (uid: string, limit?: number) => request<Array<{ id: string; source: string; agentType: string; prompt: string; tokensUsed: number; status: string; createdAt: string }>>(
+      `/api/admin/token-usage/${uid}${limit ? `?limit=${limit}` : ""}`
+    ),
+    userActivity: (uid: string, limit?: number) => request<{ uid: string; email: string; role: string; createdAt: string; stats: { projectCount: number; taskCount: number; actionCount: number }; activity: Array<{ id: string; action: string; meta: Record<string, any>; createdAt: string }> }>(
+      `/api/admin/users/${uid}/activity${limit ? `?limit=${limit}` : ""}`
+    ),
+    userProjects: (uid: string) => request<Array<{ id: string; name: string; description: string; createdAt: string; updatedAt: string; taskCount: number }>>(
+      `/api/admin/users/${uid}/projects`
+    ),
+    changeRole: (uid: string, role: string) => request<{ uid: string; role: string }>(
+      `/api/admin/users/${uid}/role`,
+      { method: "PATCH", body: JSON.stringify({ role }) }
+    ),
+    deleteUser: (uid: string) => request<void>(
+      `/api/admin/users/${uid}`,
+      { method: "DELETE" }
+    ),
   },
 };

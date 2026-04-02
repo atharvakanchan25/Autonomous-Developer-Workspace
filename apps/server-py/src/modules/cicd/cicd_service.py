@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+import asyncio
+import base64
+import time
+import httpx
 
 from src.core.database import db
 from src.core.errors import not_found
@@ -10,106 +14,237 @@ from src.realtime.events import DeploymentUpdatedPayload, CicdStageLog
 from src.core.logger import logger
 from src.auth.auth import AuthUser, get_current_user, log_action
 
-import asyncio
-import random
-
 router = APIRouter()
 
-STAGES = [
-    {"name": "tests",  "fail_rate": 0.1,  "min_ms": 1500, "max_ms": 2500,
-     "pass_detail": "All tests passed",
-     "fail_detail": "2 tests failed — assertion error in handler_test.py"},
-    {"name": "build",  "fail_rate": 0.05, "min_ms": 2000, "max_ms": 3500,
-     "pass_detail": "Build succeeded — 0 errors, 0 warnings",
-     "fail_detail": "TypeError: unsupported operand type(s) for +: 'int' and 'str'"},
-    {"name": "deploy", "fail_rate": 0.0,  "min_ms": 800,  "max_ms": 1400,
-     "pass_detail": "", "fail_detail": ""},
-]
-
-
-def _deterministic_pass(seed: str, fail_rate: float) -> bool:
-    h = 0
-    for c in seed:
-        h = (h * 31 + ord(c)) & 0xFFFFFFFF
-    return (h % 100) >= int(fail_rate * 100)
+GITHUB_API = "https://api.github.com"
+VERCEL_API = "https://api.vercel.com"
 
 
 def _stage_logs(log: list[dict]) -> list[CicdStageLog]:
     return [CicdStageLog(**e) for e in log]
 
 
-async def run_cicd_pipeline(project_id: str, task_id: Optional[str]) -> None:
-    if not db.collection("projects").document(project_id).get().exists:
-        raise not_found("Project")
+async def _emit(deploy_ref, deployment_id, project_id, task_id, status, log, stage=None, preview_url=None, error_msg=None):
+    deploy_ref.update({"log": log, "status": status, "updatedAt": now_iso(),
+                       **(({"previewUrl": preview_url}) if preview_url else {}),
+                       **(({"errorMsg": error_msg}) if error_msg else {})})
+    await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
+        deploymentId=deployment_id, projectId=project_id, taskId=task_id,
+        status=status, stage=stage, previewUrl=preview_url, errorMsg=error_msg,
+        log=_stage_logs(log), updatedAt=now_iso(),
+    ))
 
-    seed = f"{project_id}{task_id or ''}"
+
+async def _fail(deploy_ref, deployment_id, project_id, task_id, log, stage_name, detail):
+    log[-1] = {"stage": stage_name, "status": "failed", "detail": detail}
+    await _emit(deploy_ref, deployment_id, project_id, task_id, "FAILED", log, error_msg=detail)
+    logger.warning(f"CI/CD failed at {stage_name}: {detail}")
+
+
+async def run_cicd_pipeline(
+    project_id: str,
+    task_id: Optional[str],
+    github_token: str,
+    vercel_token: str,
+    repo_name: str,
+    vercel_org_id: Optional[str],
+) -> None:
+    project_doc = db.collection("projects").document(project_id).get()
+    if not project_doc.exists:
+        return
+    project_data = project_doc.to_dict()
+    project_name = project_data.get("name", "adw-project")
+
+    # Collect generated files for this project
+    files_snap = db.collection("files").where("projectId", "==", project_id).stream()
+    files = [{"path": d.to_dict().get("path", d.to_dict().get("name", "file.py")),
+              "content": d.to_dict().get("content", "")} for d in files_snap]
+
     deploy_ref = db.collection("deployments").add({
         "projectId": project_id, "taskId": task_id,
         "status": "RUNNING", "log": [],
+        "repoName": repo_name,
         "createdAt": now_iso(), "updatedAt": now_iso(),
     })[1]
     deployment_id = deploy_ref.id
     log: list[dict] = []
+    logger.info(f"Real CI/CD pipeline started: deployment={deployment_id}")
 
-    logger.info(f"CI/CD pipeline started: deployment={deployment_id}")
+    headers_gh = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github+json"}
+    headers_vc = {"Authorization": f"Bearer {vercel_token}"}
 
-    for stage in STAGES:
-        duration_ms = random.randint(stage["min_ms"], stage["max_ms"])
+    async with httpx.AsyncClient(timeout=30) as client:
+        # ── Stage 1: GitHub ──────────────────────────────────────────────────
+        t0 = time.monotonic()
+        log.append({"stage": "github", "status": "running", "detail": "Creating GitHub repository…"})
+        await _emit(deploy_ref, deployment_id, project_id, task_id, "RUNNING", log, stage="github")
 
-        log.append({"stage": stage["name"], "status": "running"})
-        deploy_ref.update({"log": log, "updatedAt": now_iso()})
-        await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
-            deploymentId=deployment_id, projectId=project_id, taskId=task_id,
-            status="RUNNING", stage=stage["name"],
-            log=_stage_logs(log), updatedAt=now_iso(),
-        ))
+        # Check if repo already exists
+        me_res = await client.get(f"{GITHUB_API}/user", headers=headers_gh)
+        if me_res.status_code != 200:
+            await _fail(deploy_ref, deployment_id, project_id, task_id, log, "github", f"Invalid GitHub token: {me_res.text}")
+            return
+        gh_user = me_res.json()["login"]
 
-        await asyncio.sleep(duration_ms / 1000)
+        repo_res = await client.get(f"{GITHUB_API}/repos/{gh_user}/{repo_name}", headers=headers_gh)
+        if repo_res.status_code == 200:
+            repo_url = repo_res.json()["html_url"]
+            default_branch = repo_res.json().get("default_branch", "main")
+            log[-1] = {"stage": "github", "status": "running", "detail": f"Repo exists — pushing files to {repo_url}"}
+            await _emit(deploy_ref, deployment_id, project_id, task_id, "RUNNING", log, stage="github")
+        else:
+            create_res = await client.post(f"{GITHUB_API}/user/repos", headers=headers_gh, json={
+                "name": repo_name, "private": False, "auto_init": True,
+                "description": f"Generated by ADW — {project_name}",
+            })
+            if create_res.status_code not in (200, 201):
+                await _fail(deploy_ref, deployment_id, project_id, task_id, log, "github",
+                            f"Failed to create repo: {create_res.json().get('message', create_res.text)}")
+                return
+            repo_url = create_res.json()["html_url"]
+            default_branch = create_res.json().get("default_branch", "main")
+            await asyncio.sleep(1.5)  # wait for GitHub to initialise
 
-        if stage["name"] == "deploy":
-            preview_url = f"https://preview-{deployment_id[-8:]}.adw-deploy.example.com"
-            log[-1] = {"stage": "deploy", "status": "passed", "durationMs": duration_ms,
-                       "detail": f"Preview deployed to {preview_url}"}
-            deploy_ref.update({"status": "SUCCESS", "previewUrl": preview_url, "log": log, "updatedAt": now_iso()})
-            await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
-                deploymentId=deployment_id, projectId=project_id, taskId=task_id,
-                status="SUCCESS", previewUrl=preview_url,
-                log=_stage_logs(log), updatedAt=now_iso(),
-            ))
-            logger.info(f"CI/CD succeeded: deployment={deployment_id} preview={preview_url}")
+        # Push each file via Contents API
+        pushed, skipped = 0, 0
+        for f in files:
+            file_path = f["path"].lstrip("/")
+            content_b64 = base64.b64encode(f["content"].encode()).decode()
+            # Get existing SHA if file exists (needed for update)
+            sha = None
+            existing = await client.get(
+                f"{GITHUB_API}/repos/{gh_user}/{repo_name}/contents/{file_path}",
+                headers=headers_gh,
+            )
+            if existing.status_code == 200:
+                sha = existing.json().get("sha")
+            payload = {"message": f"chore: add {file_path} [ADW]", "content": content_b64,
+                       "branch": default_branch}
+            if sha:
+                payload["sha"] = sha
+            put_res = await client.put(
+                f"{GITHUB_API}/repos/{gh_user}/{repo_name}/contents/{file_path}",
+                headers=headers_gh, json=payload,
+            )
+            if put_res.status_code in (200, 201):
+                pushed += 1
+            else:
+                skipped += 1
+                logger.warning(f"Skipped {file_path}: {put_res.text}")
+
+        # Always push a vercel.json so Vercel knows it's a static/python project
+        vercel_json = '{"version": 2, "builds": [{"src": "*.py", "use": "@vercel/python"}]}'
+        vj_b64 = base64.b64encode(vercel_json.encode()).decode()
+        vj_sha_res = await client.get(
+            f"{GITHUB_API}/repos/{gh_user}/{repo_name}/contents/vercel.json", headers=headers_gh)
+        vj_payload = {"message": "chore: add vercel.json [ADW]", "content": vj_b64, "branch": default_branch}
+        if vj_sha_res.status_code == 200:
+            vj_payload["sha"] = vj_sha_res.json().get("sha")
+        await client.put(f"{GITHUB_API}/repos/{gh_user}/{repo_name}/contents/vercel.json",
+                         headers=headers_gh, json=vj_payload)
+
+        gh_duration = int((time.monotonic() - t0) * 1000)
+        log[-1] = {"stage": "github", "status": "passed",
+                   "durationMs": gh_duration,
+                   "detail": f"Pushed {pushed} file(s) to {repo_url}"}
+        await _emit(deploy_ref, deployment_id, project_id, task_id, "RUNNING", log, stage="github")
+
+        # ── Stage 2: Vercel ──────────────────────────────────────────────────
+        t1 = time.monotonic()
+        log.append({"stage": "vercel", "status": "running", "detail": "Creating Vercel project…"})
+        await _emit(deploy_ref, deployment_id, project_id, task_id, "RUNNING", log, stage="vercel")
+
+        # Create or get Vercel project linked to the GitHub repo
+        vc_project_payload = {
+            "name": repo_name,
+            "gitRepository": {"type": "github", "repo": f"{gh_user}/{repo_name}"},
+            "framework": None,
+        }
+        if vercel_org_id:
+            vc_project_payload["teamId"] = vercel_org_id
+
+        vc_proj_res = await client.post(
+            f"{VERCEL_API}/v9/projects", headers=headers_vc, json=vc_project_payload)
+
+        if vc_proj_res.status_code in (200, 201):
+            vc_project_id = vc_proj_res.json()["id"]
+        elif vc_proj_res.status_code == 409:  # already exists
+            # fetch existing project
+            vc_get = await client.get(f"{VERCEL_API}/v9/projects/{repo_name}", headers=headers_vc)
+            if vc_get.status_code != 200:
+                await _fail(deploy_ref, deployment_id, project_id, task_id, log, "vercel",
+                            f"Vercel project conflict and fetch failed: {vc_get.text}")
+                return
+            vc_project_id = vc_get.json()["id"]
+        else:
+            await _fail(deploy_ref, deployment_id, project_id, task_id, log, "vercel",
+                        f"Failed to create Vercel project: {vc_proj_res.json().get('error', {}).get('message', vc_proj_res.text)}")
             return
 
-        passed = _deterministic_pass(seed + stage["name"], stage["fail_rate"])
-        detail = stage["pass_detail"] if passed else stage["fail_detail"]
-        log[-1] = {"stage": stage["name"], "status": "passed" if passed else "failed",
-                   "durationMs": duration_ms, "detail": detail}
-        deploy_ref.update({"log": log, "updatedAt": now_iso()})
+        # Trigger a deployment
+        deploy_payload = {"name": repo_name, "gitSource": {
+            "type": "github", "repoId": None,  # Vercel resolves from project
+            "ref": default_branch, "repo": f"{gh_user}/{repo_name}",
+        }}
+        vc_deploy_res = await client.post(
+            f"{VERCEL_API}/v13/deployments", headers=headers_vc, json=deploy_payload)
 
-        if not passed:
-            deploy_ref.update({"status": "FAILED", "errorMsg": detail, "updatedAt": now_iso()})
-            await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
-                deploymentId=deployment_id, projectId=project_id, taskId=task_id,
-                status="FAILED", errorMsg=detail,
-                log=_stage_logs(log), updatedAt=now_iso(),
-            ))
-            logger.warning(f"CI/CD failed at {stage['name']}: deployment={deployment_id}")
+        if vc_deploy_res.status_code not in (200, 201):
+            # Fallback: trigger via project hook
+            await _fail(deploy_ref, deployment_id, project_id, task_id, log, "vercel",
+                        f"Vercel deploy failed: {vc_deploy_res.json().get('error', {}).get('message', vc_deploy_res.text)}")
             return
 
+        vc_data = vc_deploy_res.json()
+        vc_deploy_id = vc_data.get("id", "")
+        preview_url = f"https://{vc_data.get('url', f'{repo_name}.vercel.app')}"
+
+        # Poll until ready (max 90s)
+        log[-1] = {"stage": "vercel", "status": "running",
+                   "detail": f"Waiting for Vercel build… ({preview_url})"}
+        await _emit(deploy_ref, deployment_id, project_id, task_id, "RUNNING", log, stage="vercel")
+
+        for _ in range(18):  # 18 × 5s = 90s
+            await asyncio.sleep(5)
+            status_res = await client.get(
+                f"{VERCEL_API}/v13/deployments/{vc_deploy_id}", headers=headers_vc)
+            if status_res.status_code != 200:
+                break
+            state = status_res.json().get("readyState", "")
+            if state in ("READY", "ERROR", "CANCELED"):
+                if state != "READY":
+                    err = status_res.json().get("errorMessage", "Vercel build failed")
+                    await _fail(deploy_ref, deployment_id, project_id, task_id, log, "vercel", err)
+                    return
+                break
+
+        vc_duration = int((time.monotonic() - t1) * 1000)
+        log[-1] = {"stage": "vercel", "status": "passed",
+                   "durationMs": vc_duration,
+                   "detail": f"Live at {preview_url}"}
+
+        deploy_ref.update({"status": "SUCCESS", "previewUrl": preview_url,
+                           "repoUrl": repo_url, "log": log, "updatedAt": now_iso()})
         await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
             deploymentId=deployment_id, projectId=project_id, taskId=task_id,
-            status="RUNNING", stage=stage["name"],
+            status="SUCCESS", previewUrl=preview_url,
             log=_stage_logs(log), updatedAt=now_iso(),
         ))
+        logger.info(f"CI/CD succeeded: deployment={deployment_id} preview={preview_url}")
 
 
 class TriggerCicdRequest(BaseModel):
     projectId: str
     taskId: Optional[str] = None
+    githubToken: str
+    vercelToken: str
+    repoName: str
+    vercelOrgId: Optional[str] = None
 
 
 @router.post("/deploy")
 async def trigger_cicd(body: TriggerCicdRequest, user: AuthUser = Depends(get_current_user)):
-    """Trigger CI/CD pipeline for a project."""
+    """Trigger real GitHub + Vercel CI/CD pipeline."""
     project_doc = db.collection("projects").document(body.projectId).get()
     if not project_doc.exists:
         raise not_found("Project")
@@ -118,8 +253,12 @@ async def trigger_cicd(body: TriggerCicdRequest, user: AuthUser = Depends(get_cu
     if not user.can_access_resource(project_data.get("ownerId")):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    asyncio.create_task(run_cicd_pipeline(body.projectId, body.taskId))
-    await log_action(user, "CICD_TRIGGER", {"projectId": body.projectId, "taskId": body.taskId})
+    asyncio.create_task(run_cicd_pipeline(
+        body.projectId, body.taskId,
+        body.githubToken, body.vercelToken,
+        body.repoName, body.vercelOrgId,
+    ))
+    await log_action(user, "CICD_TRIGGER", {"projectId": body.projectId, "repoName": body.repoName})
     return {"message": "CI/CD pipeline triggered"}
 
 
