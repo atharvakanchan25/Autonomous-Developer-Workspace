@@ -26,17 +26,24 @@ ROLES = ("user", "admin")
 
 # Source-of-truth admin emails — role is ALWAYS enforced from here,
 # regardless of what is stored in the database.
-ADMIN_EMAILS: set[str] = {
+DEFAULT_ADMIN_EMAILS: set[str] = {
     "tanvihole@adw.com",
     "saloni@adw.com",
     "varadmandhare@adw.com",
     "prajwalshedge@adw.com",
     "aryankanchan@adw.com",
+    "atharvakanchan@adw.com",
     "atharvakanchan959@gmail.com",
-    # Add your email here (lowercase)
-    # "youremail@example.com",
+    "abhidhautre@adw.com",
 }
-ADMIN_EMAILS = {e.lower() for e in ADMIN_EMAILS}
+
+ENV_ADMIN_EMAILS = {
+    email.strip().lower()
+    for email in config.ADMIN_EMAILS.split(",")
+    if email.strip()
+}
+
+ADMIN_EMAILS = {e.lower() for e in DEFAULT_ADMIN_EMAILS | ENV_ADMIN_EMAILS}
 
 
 class AuthUser:

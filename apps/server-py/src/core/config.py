@@ -9,6 +9,7 @@ class Config(BaseSettings):
     FIREBASE_PROJECT_ID: str
     FIREBASE_CLIENT_EMAIL: str
     FIREBASE_PRIVATE_KEY: str
+    ADMIN_EMAILS: str = ""
     CORS_ORIGIN: str = "http://localhost:3000"
     LOG_LEVEL: Literal["debug", "info", "warning", "error"] = "info"
     RATE_LIMIT_WINDOW_MS: int = 60_000
