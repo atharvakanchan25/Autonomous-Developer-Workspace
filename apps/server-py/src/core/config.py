@@ -13,6 +13,7 @@ class Config(BaseSettings):
     LOG_LEVEL: Literal["debug", "info", "warning", "error"] = "info"
     RATE_LIMIT_WINDOW_MS: int = 60_000
     RATE_LIMIT_MAX: int = 200
+    VERCEL_TOKEN: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

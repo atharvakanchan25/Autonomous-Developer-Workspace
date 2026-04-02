@@ -123,6 +123,9 @@ async def dispatch_agent(
         taskTitle=task["title"],
         taskDescription=task.get("description", task["title"]),
         previousOutputs=previous_outputs,
+        style_theme=project.get("styleTheme", "Dark"),
+        style_font=project.get("styleFont", "Modern"),
+        style_layout=project.get("styleLayout", "Minimal"),
     )
 
     prompt = f"{ctx.taskTitle}\n\n{ctx.taskDescription}"

@@ -50,3 +50,6 @@ class AgentContext:
     taskTitle: str
     taskDescription: str
     previousOutputs: dict[AgentType, AgentResult] = field(default_factory=dict)
+    style_theme: str = "Dark"
+    style_font: str = "Modern"
+    style_layout: str = "Minimal"

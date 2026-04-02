@@ -22,8 +22,28 @@ import type {
 
 const BASE = webConfig.apiUrl;
 
+/** Wait for Firebase to restore auth state, then return the ID token (or null). */
+function getToken(): Promise<string | null> {
+  return new Promise((resolve) => {
+    // If already resolved, return immediately
+    if (auth.currentUser) {
+      auth.currentUser.getIdToken().then(resolve).catch(() => resolve(null));
+      return;
+    }
+    // Otherwise wait for the first auth state change
+    const unsub = auth.onAuthStateChanged((user) => {
+      unsub();
+      if (user) {
+        user.getIdToken().then(resolve).catch(() => resolve(null));
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await auth.currentUser?.getIdToken();
+  const token = await getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -132,10 +152,10 @@ export const api = {
     },
   },
   cicd: {
-    trigger: (projectId: string, taskId?: string) =>
+    trigger: (projectId: string, taskId?: string, stylePrefs?: { style_theme: string; style_font: string; style_layout: string }) =>
       request<{ message: string }>("/api/cicd/deploy", {
         method: "POST",
-        body: JSON.stringify({ projectId, taskId }),
+        body: JSON.stringify({ projectId, taskId, ...stylePrefs }),
       }),
     list: (projectId: string) =>
       request<Deployment[]>(`/api/cicd/deployments?projectId=${projectId}`),
