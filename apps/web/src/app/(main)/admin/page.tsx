@@ -112,12 +112,10 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-const SUPERUSER_EMAIL = "aryankanchan@adw.com";
-
 export default function AdminPage() {
   const { user, loading, hasRole } = useAuth();
   const router = useRouter();
-  const isSuperuser = user?.email === SUPERUSER_EMAIL;
+  const isSuperuser = hasRole("admin");
 
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -337,14 +335,8 @@ export default function AdminPage() {
           <div className="text-right">
             <p className="text-xs text-gray-400">Logged in as</p>
             <p className="text-sm font-medium text-gray-200">{user.email}</p>
-            <span
-              className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                user.email === SUPERUSER_EMAIL
-                  ? "border-indigo-700 bg-indigo-900/30 text-indigo-400"
-                  : "border-yellow-700 bg-yellow-900/30 text-yellow-400"
-              }`}
-            >
-              {user.email === SUPERUSER_EMAIL ? "SUPERUSER" : "ADMIN"}
+            <span className="mt-1 inline-block rounded-full border border-yellow-700 bg-yellow-900/30 px-2 py-0.5 text-[10px] font-medium text-yellow-400">
+              ADMIN
             </span>
             <button
               onClick={() => { setDataLoaded(false); }}
