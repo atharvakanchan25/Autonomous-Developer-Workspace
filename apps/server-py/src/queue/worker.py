@@ -6,7 +6,6 @@ from src.core.database import db
 from src.core.logger import logger
 from src.core.utils import now_iso
 from src.agents.langgraph_pipeline import run_langgraph_pipeline
-from src.modules.cicd.cicd_service import run_cicd_pipeline
 
 
 async def _queue_dependent_tasks(completed_task_id: str, project_id: str) -> None:
@@ -62,9 +61,6 @@ async def _process_job(job: Job) -> None:
     all_passed = all(r.status == "COMPLETED" for r in pipeline_results)
 
     if all_passed:
-        asyncio.create_task(run_cicd_pipeline(project_id, task_id))
-        
-        # Queue dependent tasks
         await _queue_dependent_tasks(task_id, project_id)
 
     duration_ms = int((time.monotonic() - started_at) * 1000)

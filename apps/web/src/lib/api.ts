@@ -166,8 +166,10 @@ export const api = {
       }),
   },
   admin: {
-    projects: () => request<Array<Project & { ownerEmail: string; taskCount: number }>>("/api/admin/projects"),
-    users: () => request<Array<{ id: string; uid: string; email: string; role: string; createdAt: string }>>("/api/admin/users"),
+    stats: () => request<import("@/types").SystemStats>("/api/admin/stats"),
+    projects: () => request<Array<Project & { ownerEmail: string; taskCount: number; completedTasks: number }>>("/api/admin/projects"),
+    deleteProject: (id: string) => request<void>(`/api/admin/projects/${id}`, { method: "DELETE" }),
+    users: () => request<Array<{ id: string; uid: string; email: string; role: string; createdAt: string; projectCount: number }>>("/api/admin/users"),
     auditLogs: (limit?: number, userId?: string) => {
       const params = new URLSearchParams();
       if (limit) params.set("limit", limit.toString());
@@ -176,23 +178,21 @@ export const api = {
         `/api/admin/audit-logs${params.toString() ? `?${params.toString()}` : ""}`
       );
     },
-    tokenUsage: () => request<Array<{ uid: string; email: string; role: string; totalTokens: number; callCount: number; lastCallAt: string | null; limit: number; remaining: number; limitExceeded: boolean }>>("/api/admin/token-usage"),
-    userTokenCalls: (uid: string, limit?: number) => request<Array<{ id: string; source: string; agentType: string; prompt: string; tokensUsed: number; status: string; createdAt: string }>>(
-      `/api/admin/token-usage/${uid}${limit ? `?limit=${limit}` : ""}`
-    ),
-    userActivity: (uid: string, limit?: number) => request<{ uid: string; email: string; role: string; createdAt: string; stats: { projectCount: number; taskCount: number; actionCount: number }; activity: Array<{ id: string; action: string; meta: Record<string, any>; createdAt: string }> }>(
-      `/api/admin/users/${uid}/activity${limit ? `?limit=${limit}` : ""}`
-    ),
-    userProjects: (uid: string) => request<Array<{ id: string; name: string; description: string; createdAt: string; updatedAt: string; taskCount: number }>>(
-      `/api/admin/users/${uid}/projects`
-    ),
-    changeRole: (uid: string, role: string) => request<{ uid: string; role: string }>(
-      `/api/admin/users/${uid}/role`,
-      { method: "PATCH", body: JSON.stringify({ role }) }
-    ),
-    deleteUser: (uid: string) => request<void>(
-      `/api/admin/users/${uid}`,
-      { method: "DELETE" }
-    ),
+    tokenUsage: () => request<import("@/types").UserTokenUsage[]>("/api/admin/token-usage"),
+    userTokenCalls: (uid: string) => request<Array<{ id: string; source: string; agentType: string; prompt: string; tokensUsed: number; status: string; durationMs: number; createdAt: string }>>(`/api/admin/token-usage/${uid}`),
+    userActivity: (uid: string) => request<{ uid: string; email: string; role: string; createdAt: string; stats: { projectCount: number; taskCount: number; actionCount: number; agentRuns: number; totalTokens: number }; activity: Array<{ id: string; action: string; meta: Record<string, any>; createdAt: string }> }>(`/api/admin/users/${uid}/activity`),
+    userProjects: (uid: string) => request<Array<{ id: string; name: string; description: string; language: string; createdAt: string; updatedAt: string; taskCount: number; completedTasks: number }>>(`/api/admin/users/${uid}/projects`),
+    deleteUserProject: (uid: string, projectId: string) => request<void>(`/api/admin/users/${uid}/projects/${projectId}`, { method: "DELETE" }),
+    changeRole: (uid: string, role: string) => request<{ uid: string; role: string }>(`/api/admin/users/${uid}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+    deleteUser: (uid: string) => request<void>(`/api/admin/users/${uid}`, { method: "DELETE" }),
+    setTokenLimit: (uid: string, limit: number) => request<{ uid: string; tokenLimit: number }>(`/api/admin/users/${uid}/token-limit`, { method: "PATCH", body: JSON.stringify({ limit }) }),
+    sendAlert: (message: string, type: string, targetUid?: string) => request<import("@/types").Alert>("/api/admin/alerts", { method: "POST", body: JSON.stringify({ message, type, targetUid: targetUid ?? null }) }),
+    alerts: () => request<import("@/types").Alert[]>("/api/admin/alerts"),
+    deleteAlert: (id: string) => request<void>(`/api/admin/alerts/${id}`, { method: "DELETE" }),
+  },
+  profile: {
+    myAlerts: () => request<import("@/types").Alert[]>("/api/admin/my-alerts"),
+    myTokenUsage: () => request<import("@/types").UserTokenUsage>("/api/admin/my-token-usage"),
+    deleteAccount: () => request<void>("/api/admin/me", { method: "DELETE" }),
   },
 };

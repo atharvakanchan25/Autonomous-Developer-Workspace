@@ -13,8 +13,6 @@ from src.realtime.events import AgentLogPayload, PipelineStagePayload, TaskUpdat
 from src.agents.agent_registry import get_agent
 from src.agents.agent_types import AgentType, AgentRunStatus, AgentContext, AgentResult
 
-PIPELINE_ORDER = [AgentType.CODE_GENERATOR, AgentType.TEST_GENERATOR, AgentType.CODE_REVIEWER]
-
 
 @dataclass
 class DispatchResult:
@@ -204,71 +202,6 @@ async def dispatch_agent(
             status="FAILED", error=error_msg, durationMs=duration_ms,
         )
 
-
-async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
-    task = _get_task(task_id)
-    project_id: str = task["projectId"]
-
-    ts = now_iso()
-    db.collection("tasks").document(task_id).update({"status": "IN_PROGRESS", "updatedAt": ts})
-    task_cache.delete(task_id)
-
-    await emitter.emit_task_updated(TaskUpdatedPayload(
-        taskId=task_id, projectId=project_id, status="IN_PROGRESS",
-        title=task["title"], updatedAt=ts,
-    ))
-    await emitter.emit_agent_log(AgentLogPayload(
-        taskId=task_id, projectId=project_id, agentRunId="",
-        agentType="PIPELINE", level="info",
-        message=f'Pipeline started for "{task["title"]}"', timestamp=ts,
-    ))
-    logger.info(f"Pipeline started: task={task_id}")
-
-    results: list[DispatchResult] = []
-    previous_outputs: dict[AgentType, AgentResult] = {}
-
-    for agent_type in PIPELINE_ORDER:
-        result = await dispatch_agent(task_id, agent_type, previous_outputs)
-        results.append(result)
-
-        if result.status == "FAILED":
-            ts = now_iso()
-            db.collection("tasks").document(task_id).update({"status": "FAILED", "updatedAt": ts})
-            task_cache.delete(task_id)
-            await emitter.emit_task_updated(TaskUpdatedPayload(
-                taskId=task_id, projectId=project_id, status="FAILED",
-                title=task["title"], updatedAt=ts,
-            ))
-            logger.error(f"Pipeline aborted at {agent_type.value}")
-            return results
-
-        if result.result:
-            previous_outputs[agent_type] = result.result
-
-    ts = now_iso()
-    db.collection("tasks").document(task_id).update({"status": "COMPLETED", "updatedAt": ts})
-    task_cache.delete(task_id)
-
-    await emitter.emit_task_updated(TaskUpdatedPayload(
-        taskId=task_id, projectId=project_id, status="COMPLETED",
-        title=task["title"], updatedAt=ts,
-    ))
-    await emitter.emit_agent_log(AgentLogPayload(
-        taskId=task_id, projectId=project_id, agentRunId="",
-        agentType="PIPELINE", level="info",
-        message=f'Pipeline completed for "{task["title"]}" — all {len(results)} agents passed',
-        timestamp=ts,
-    ))
-
-    try:
-        await _persist_artifacts(project_id, results)
-    except Exception as err:
-        logger.error(f"Failed to persist artifacts: {err}", exc_info=True)
-
-    asyncio.create_task(_maybe_run_scaffold(project_id))
-
-    logger.info(f"Pipeline completed: task={task_id} stages={len(results)}")
-    return results
 
 
 async def _maybe_run_scaffold(project_id: str) -> None:

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { Sidebar } from "@/components/Sidebar";
+import { AlertsBanner } from "@/components/AlertsBanner";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -33,8 +34,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        {children}
-      </div>
+          <AlertsBanner />
+          {children}
+        </div>
     </div>
   );
 }

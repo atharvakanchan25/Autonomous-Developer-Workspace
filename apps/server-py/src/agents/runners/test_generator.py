@@ -64,11 +64,17 @@ class TestGeneratorAgent:
             LlmMessage(role="system", content=(
                 f"You are an expert in {language.title()} testing with {test_framework}{framework_hint}.\n"
                 f"Project: {ctx.projectName}\n\n"
-                "Output ONLY the test code — no prose, no markdown fences.\n"
-                f"Write ONLY {language.title()} test code using {test_framework}.\n"
-                "Cover: happy path, edge cases, error cases.\n"
-                "Mock external dependencies appropriately.\n"
-                "Each test must have a clear descriptive name."
+                "Output ONLY the test code — no prose, no markdown fences.\n\n"
+                f"STRICT TEST QUALITY RULES — every rule is mandatory:\n"
+                f"1. Write ONLY {language.title()} test code using {test_framework}.\n"
+                "2. Every test function must have a clear descriptive name that states WHAT is being tested and WHAT the expected outcome is.\n"
+                "3. Cover: happy path, edge cases (empty input, boundary values), and error/exception cases.\n"
+                "4. Use fixtures or setup/teardown to avoid duplicated setup code.\n"
+                "5. Use parametrize / data-driven tests where multiple similar cases exist.\n"
+                "6. Each test must have exactly ONE logical assertion — split multi-assertion tests.\n"
+                "7. Mock ALL external dependencies (DB, HTTP, filesystem, time).\n"
+                "8. Include a module-level docstring describing what is being tested.\n"
+                "9. Tests must be fully runnable with no modification — no placeholder values."
             )),
             LlmMessage(role="user", content=(
                 f"Task: {ctx.taskTitle}\n"

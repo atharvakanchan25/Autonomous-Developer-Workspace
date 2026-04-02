@@ -67,7 +67,6 @@ async def list_agent_runs(task_id: str, user: AuthUser = Depends(get_current_use
     task_doc = db.collection("tasks").document(task_id).get()
     if not task_doc.exists:
         raise not_found("Task")
-
     runs = db.collection("agentRuns").where("taskId", "==", task_id).order_by("createdAt").stream()
     return [{"id": d.id, **d.to_dict()} for d in runs]
 

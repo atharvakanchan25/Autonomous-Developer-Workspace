@@ -76,7 +76,7 @@ async def update_project(project_id: str, body: CreateProjectRequest, user: Auth
 
 @router.delete("/{project_id}", status_code=204)
 async def delete_project(project_id: str, user: AuthUser = Depends(get_current_user)):
-    """Delete a project and all its tasks."""
+    """Delete a project and all its children (tasks, files, agent runs, deployments)."""
     doc = db.collection("projects").document(project_id).get()
     if not doc.exists:
         raise not_found("Project")
@@ -85,8 +85,19 @@ async def delete_project(project_id: str, user: AuthUser = Depends(get_current_u
     if not user.can_access_resource(project_data.get("ownerId")):
         raise HTTPException(status_code=403, detail="Access denied. Only project owner or admin can delete.")
 
-    for task in db.collection("tasks").where("projectId", "==", project_id).stream():
-        task.reference.delete()
-
-    db.collection("projects").document(project_id).delete()
+    _cascade_delete_project(project_id)
     await log_action(user, "PROJECT_DELETE", {"projectId": project_id})
+
+
+def _cascade_delete_project(project_id: str):
+    for task in db.collection("tasks").where("projectId", "==", project_id).stream():
+        for run in db.collection("agentRuns").where("taskId", "==", task.id).stream():
+            run.reference.delete()
+        task.reference.delete()
+    for f in db.collection("projectFiles").where("projectId", "==", project_id).stream():
+        for v in db.collection("fileVersions").where("fileId", "==", f.id).stream():
+            v.reference.delete()
+        f.reference.delete()
+    for dep in db.collection("deployments").where("projectId", "==", project_id).stream():
+        dep.reference.delete()
+    db.collection("projects").document(project_id).delete()

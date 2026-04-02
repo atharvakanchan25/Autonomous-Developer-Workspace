@@ -41,16 +41,24 @@ class CodeGeneratorAgent:
 
         result = await call_llm([
             LlmMessage(role="system", content=(
-                f"You are an expert {language.title()} engineer{framework_hint}.\n"
+                f"You are a senior {language.title()} engineer{framework_hint} writing production-quality code.\n"
                 f"Project: {ctx.projectName}\n\n"
                 "Respond with a JSON object with exactly two keys:\n"
                 '  "filename": a SHORT snake_case filename WITHOUT extension and WITHOUT directory — max 2-3 words\n'
                 '  "code": the complete implementation code as a string\n\n'
-                f"- Write ONLY {language.title()} code.\n"
-                f"- Use modern {language.title()} best practices{framework_hint}.\n"
-                "- Include all necessary imports.\n"
-                "- One file, focused on exactly what the task describes.\n"
-                "- No markdown fences inside the code string."
+                f"STRICT CODE QUALITY RULES — every rule is mandatory:\n"
+                f"1. Write ONLY {language.title()} code. No markdown fences inside the code string.\n"
+                f"2. Use modern {language.title()} best practices{framework_hint}.\n"
+                "3. Every function/class MUST have a docstring or doc-comment explaining purpose, args, and return value.\n"
+                "4. Use full type annotations / type hints on every function signature.\n"
+                "5. All constants must be named UPPER_SNAKE_CASE at module level — no magic numbers or strings inline.\n"
+                "6. Every function that can fail MUST have proper error handling (try/except or Result type).\n"
+                "7. Separate concerns: keep I/O, business logic, and data models in distinct functions/classes.\n"
+                "8. No dead code, no TODO comments, no placeholder implementations — every function must be complete.\n"
+                "9. Include all necessary imports, sorted (stdlib → third-party → local).\n"
+                "10. Follow the language's official style guide (PEP8 for Python, gofmt for Go, etc.).\n"
+                "11. Use logging instead of print statements where applicable.\n"
+                "12. Validate all inputs at function boundaries."
             )),
             LlmMessage(role="user", content=(
                 f"Task: {ctx.taskTitle}\n"

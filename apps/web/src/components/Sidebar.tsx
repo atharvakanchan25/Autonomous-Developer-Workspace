@@ -2,14 +2,23 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { duration, ease } from "@/lib/motion";
-import { auth, signOut } from "@/lib/firebase";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { duration } from "@/lib/motion";
 import type { User } from "firebase/auth";
 import { useAuth } from "@/lib/useAuth";
+import { api } from "@/lib/api";
 
 const NAV = [
+  {
+    href: "/profile",
+    label: "Profile",
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
   {
     href: "/home",
     label: "Home",
@@ -132,183 +141,26 @@ function providerLabel(user: User): string {
   return "Email";
 }
 
-// ── Account popover ────────────────────────────────────────────────────────────
 
-function AccountPopover({ user, role, onClose, onLogout }: {
-  user: User;
-  role: string;
-  onClose: () => void;
-  onLogout: () => void;
-}) {
-  const isAdmin = role === "admin";
-
-  const joined = user.metadata.creationTime
-    ? new Date(user.metadata.creationTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : "—";
-
-  const lastSignIn = user.metadata.lastSignInTime
-    ? new Date(user.metadata.lastSignInTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : "—";
-
-  const provider = providerLabel(user);
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-
-      <motion.div
-        className="absolute bottom-full left-0 z-50 mb-2 w-[240px] overflow-hidden rounded-xl border border-gray-700 bg-[#1a1f2e] shadow-2xl"
-        initial={{ opacity: 0, y: 8, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 8, scale: 0.97 }}
-        transition={{ duration: duration.fast, ease: ease.enter }}
-      >
-        {/* Admin privilege banner */}
-        {isAdmin && (
-          <div className="flex items-center gap-2 bg-red-900/30 border-b border-red-800/40 px-4 py-2">
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0 text-red-400">
-              <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span className="text-[11px] font-semibold text-red-300 tracking-wide uppercase">Admin Privileges</span>
-          </div>
-        )}
-
-        {/* User header */}
-        <div className="flex items-center gap-3 border-b border-gray-700 px-4 py-3.5">
-          <Avatar user={user} isAdmin={isAdmin} />
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <p className="truncate text-sm font-medium text-gray-100">
-                {user.displayName ?? "User"}
-              </p>
-              {isAdmin && (
-                <span className="shrink-0 rounded-full bg-red-900/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-300">
-                  Admin
-                </span>
-              )}
-            </div>
-            <p className="truncate text-[11px] text-gray-500">{user.email}</p>
-          </div>
-        </div>
-
-        {/* Account details */}
-        <div className="space-y-2 px-4 py-3 border-b border-gray-700">
-          {/* Role + permissions */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">Role</span>
-            {isAdmin ? (
-              <span className="rounded-full bg-red-900/50 px-2 py-0.5 text-[10px] font-medium text-red-300">Admin</span>
-            ) : (
-              <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[10px] font-medium text-gray-400">User</span>
-            )}
-          </div>
-
-          {/* Permissions summary — only shown for admins */}
-          {isAdmin && (
-            <div className="rounded-lg bg-red-950/30 border border-red-900/30 px-3 py-2 space-y-1">
-              {[
-                "Full project & task access",
-                "User management",
-                "System logs & audit trail",
-                "Task assignment to anyone",
-              ].map((perm) => (
-                <div key={perm} className="flex items-center gap-1.5">
-                  <svg viewBox="0 0 12 12" fill="currentColor" className="h-2.5 w-2.5 shrink-0 text-red-400">
-                    <path d="M10 3L5 8.5 2 5.5l-1 1L5 10.5l6-8.5-1-1z" />
-                  </svg>
-                  <span className="text-[10px] text-red-300/80">{perm}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Sign-in provider */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">Signed in with</span>
-            <span className="rounded-full bg-indigo-900/50 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
-              {provider}
-            </span>
-          </div>
-
-          {/* Email verified */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">Email verified</span>
-            <div className="flex items-center gap-1">
-              <span className={`h-1.5 w-1.5 rounded-full ${user.emailVerified ? "bg-green-400" : "bg-amber-400"}`} />
-              <span className={`text-[11px] font-medium ${user.emailVerified ? "text-green-400" : "text-amber-400"}`}>
-                {user.emailVerified ? "Verified" : "Unverified"}
-              </span>
-            </div>
-          </div>
-
-          {/* Account status */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">Account status</span>
-            <div className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-              <span className="text-[11px] font-medium text-green-400">Active</span>
-            </div>
-          </div>
-
-          {/* Joined */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">Joined</span>
-            <span className="text-[11px] text-gray-300">{joined}</span>
-          </div>
-
-          {/* Last sign in */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">Last sign in</span>
-            <span className="text-[11px] text-gray-300">{lastSignIn}</span>
-          </div>
-
-          {/* UID */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-500">User ID</span>
-            <span className="truncate max-w-[110px] text-[10px] font-mono text-gray-500" title={user.uid}>
-              {user.uid.slice(0, 12)}…
-            </span>
-          </div>
-        </div>
-
-        {/* Sign out */}
-        <div className="px-2 py-2">
-          <button
-            onClick={onLogout}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-400 transition-colors hover:bg-red-900/20 hover:text-red-300"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0">
-              <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
-            </svg>
-            Sign out
-          </button>
-        </div>
-      </motion.div>
-    </>
-  );
-}
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
   const { hasRole, user, loading: authLoading } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const isAdmin = user?.role === "admin";
-  const role = user?.role ?? "user";
 
-  async function handleLogout() {
-    setOpen(false);
-    await signOut(auth);
-    router.replace("/login");
-  }
+  useEffect(() => {
+    if (!user) return;
+    api.profile.myAlerts().then((a) => setUnreadCount(a.length)).catch(() => {});
+  }, [user]);
 
   return (
     <aside className="flex h-screen w-[200px] shrink-0 flex-col border-r border-gray-700 bg-[#1a1f2e]">
       {/* Logo */}
-      <div className="flex h-14 items-center border-b border-gray-700 px-5">
+      <div className="flex h-14 items-center justify-between border-b border-gray-700 px-5">
         <Link href="/home" className="flex items-center gap-2.5">
           <motion.div
             className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-600"
@@ -321,6 +173,16 @@ export function Sidebar() {
             </svg>
           </motion.div>
           <span className="text-sm font-semibold tracking-tight text-gray-100">ADW</span>
+        </Link>
+        <Link href="/profile" className="relative">
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-gray-500 hover:text-gray-300">
+            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zm0 16a2 2 0 01-2-2h4a2 2 0 01-2 2z" />
+          </svg>
+          {unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
         </Link>
       </div>
 
@@ -353,23 +215,12 @@ export function Sidebar() {
       </nav>
 
       {/* Account footer */}
-      <div className="relative border-t border-gray-700 px-3 py-3">
-        <AnimatePresence>
-          {open && user && (
-            <AccountPopover
-              user={user}
-              role={role}
-              onClose={() => setOpen(false)}
-              onLogout={handleLogout}
-            />
-          )}
-        </AnimatePresence>
-
+      <div className="border-t border-gray-700 px-3 py-3">
         {user ? (
-          <button
-            onClick={() => setOpen((s) => !s)}
+          <Link
+            href="/profile"
             className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 transition-colors ${
-              isAdmin ? "hover:bg-red-900/20" : "hover:bg-gray-800/60"
+              pathname === "/profile" ? "bg-indigo-900/40" : isAdmin ? "hover:bg-red-900/20" : "hover:bg-gray-800/60"
             }`}
           >
             <Avatar user={user} isAdmin={isAdmin} />
@@ -378,7 +229,6 @@ export function Sidebar() {
                 <p className="truncate text-xs font-medium text-gray-200">
                   {user.displayName ?? "Account"}
                 </p>
-                {/* Admin badge — always visible in footer */}
                 {isAdmin && !authLoading && (
                   <span className="shrink-0 rounded-sm bg-red-900/70 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-red-300">
                     Admin
@@ -387,13 +237,10 @@ export function Sidebar() {
               </div>
               <p className="truncate text-[10px] text-gray-500">{user.email}</p>
             </div>
-            <svg
-              viewBox="0 0 20 20" fill="currentColor"
-              className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""} ${isAdmin ? "text-red-500/60" : "text-gray-500"}`}
-            >
-              <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0 text-gray-500">
+              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
             </svg>
-          </button>
+          </Link>
         ) : (
           <div className="px-2 py-1">
             <p className="text-[11px] text-gray-500">Autonomous Developer</p>
