@@ -13,6 +13,7 @@ import {
   signInWithPopup,
 } from "@/lib/firebase";
 import { FirebaseError } from "firebase/app";
+import { getPostLoginRoute } from "@/lib/useAuth";
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -188,8 +189,8 @@ export default function LoginPage() {
     setErrors({});
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/home");
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      router.push(await getPostLoginRoute(user));
     } catch (err) {
       setErrors({ form: parseFirebaseError(err) });
     } finally {
@@ -201,8 +202,8 @@ export default function LoginPage() {
     setSocialLoading(provider);
     setErrors({});
     try {
-      await signInWithPopup(auth, provider === "google" ? googleProvider : githubProvider);
-      router.push("/home");
+      const { user } = await signInWithPopup(auth, provider === "google" ? googleProvider : githubProvider);
+      router.push(await getPostLoginRoute(user));
     } catch (err) {
       const msg = parseFirebaseError(err);
       if (msg) setErrors({ form: msg });

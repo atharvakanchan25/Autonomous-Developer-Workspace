@@ -11,7 +11,7 @@ export interface AuthUserWithRole extends User {
   role: UserRole;
 }
 
-async function fetchRole(firebaseUser: User, retries = 3): Promise<UserRole> {
+export async function fetchRole(firebaseUser: User, retries = 3): Promise<UserRole> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       // Force refresh token to ensure backend gets latest auth state
@@ -44,6 +44,11 @@ async function fetchRole(firebaseUser: User, retries = 3): Promise<UserRole> {
 
   console.error(`[useAuth] All ${retries} attempts failed, defaulting to 'user' role`);
   return "user";
+}
+
+export async function getPostLoginRoute(firebaseUser: User): Promise<"/home" | "/admin"> {
+  const role = await fetchRole(firebaseUser);
+  return role === "admin" ? "/admin" : "/home";
 }
 
 export function useAuth() {

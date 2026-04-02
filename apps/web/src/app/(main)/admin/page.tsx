@@ -107,6 +107,12 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function formatDate(dateStr: string) {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 const SUPERUSER_EMAIL = "aryankanchan@adw.com";
 
 export default function AdminPage() {
@@ -314,6 +320,9 @@ export default function AdminPage() {
     acc[l.userId] = (acc[l.userId] ?? 0) + 1;
     return acc;
   }, {});
+  const admins = users
+    .filter((u) => u.role === "admin")
+    .sort((a, b) => a.email.localeCompare(b.email));
 
   if (loading || !user || !hasRole("admin")) {
     return (
@@ -379,12 +388,94 @@ export default function AdminPage() {
             <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
           </div>
         ) : tab === "users" ? (
-          <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">User management coming soon</p>
+          <div className="overflow-hidden rounded-lg border border-gray-700 bg-[#1a1f2e]">
+            {users.length === 0 ? (
+              <p className="p-4 text-sm text-gray-400">No users found yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead className="bg-[#22283a]">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">User</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Role</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Joined</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Activity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800">
+                    {users
+                      .slice()
+                      .sort((a, b) => a.email.localeCompare(b.email))
+                      .map((u) => (
+                        <tr key={u.uid} className="hover:bg-[#202638]">
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium text-gray-100">{u.email}</span>
+                              <span className="text-xs text-gray-500">{u.uid}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${
+                                u.role === "admin"
+                                  ? "border-yellow-700 bg-yellow-900/30 text-yellow-400"
+                                  : "border-gray-700 bg-gray-800 text-gray-300"
+                              }`}
+                            >
+                              {u.role.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-300">{formatDate(u.createdAt)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-400">{actionCountByUser[u.uid] ?? 0} actions</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         ) : tab === "admins" ? (
-          <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Admin management coming soon</p>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+              <p className="text-sm text-gray-300">Live admin accounts from the current backend role data.</p>
+              <p className="mt-1 text-xs text-gray-500">Admins are resolved in real time from `/api/admin/users` and your backend admin email rules.</p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {admins.length === 0 ? (
+                <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4 text-sm text-gray-400">
+                  No admins found.
+                </div>
+              ) : (
+                admins.map((adminUser) => (
+                  <div key={adminUser.uid} className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-100">{adminUser.email}</p>
+                        <p className="mt-1 text-xs text-gray-500">{adminUser.uid}</p>
+                      </div>
+                      <span className="rounded-full border border-yellow-700 bg-yellow-900/30 px-2 py-1 text-[10px] font-medium text-yellow-400">
+                        ADMIN
+                      </span>
+                    </div>
+                    <div className="mt-4 space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Joined</span>
+                        <span className="text-gray-300">{formatDate(adminUser.createdAt)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Recent activity</span>
+                        <span className="text-gray-300">{actionCountByUser[adminUser.uid] ?? 0} actions</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Status</span>
+                        <span className="text-emerald-400">Active</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         ) : tab === "tokens" ? (
           <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
@@ -403,3 +494,4 @@ export default function AdminPage() {
     </div>
   );
 }
+  
