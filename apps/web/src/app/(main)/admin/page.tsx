@@ -116,7 +116,9 @@ export default function AdminPage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<
+    Array<Project & { ownerEmail: string; taskCount: number }>
+  >([]);
   const [tab, setTab] = useState<"users" | "audit" | "projects" | "admins" | "tokens">("users");
   const [loadingData, setLoadingData] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -135,6 +137,7 @@ export default function AdminPage() {
   const [tokenCallsLoading, setTokenCallsLoading] = useState(false);
 
   const [auditFilter, setAuditFilter] = useState<string>("ALL");
+  const [userSearch, setUserSearch] = useState("");
 
   useEffect(() => {
     if (!loading && !hasRole("admin")) {
@@ -380,26 +383,344 @@ export default function AdminPage() {
           </div>
         ) : tab === "users" ? (
           <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">User management coming soon</p>
+            <div className="p-3 border-b border-gray-700">
+              <input
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="Search users..."
+                className="w-full bg-[#0f1419] border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 outline-none focus:border-indigo-500"
+              />
+            </div>
+            <table className="w-full text-sm text-left">
+  <thead className="bg-[#111827] text-gray-400">
+    <tr>
+      <th className="px-4 py-3">Email</th>
+      <th className="px-4 py-3">Role</th>
+      <th className="px-4 py-3">Created</th>
+      <th className="px-4 py-3">Actions</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    {users.filter((u) => u.email.toLowerCase().includes(userSearch.toLowerCase())).map((u) => (
+      <tr
+        key={u.uid}
+        onClick={() => openUser(u)}
+        className="border-t border-gray-700 hover:bg-[#111827] cursor-pointer"
+      >
+        <td className="px-4 py-3 text-gray-200">{u.email}</td>
+
+        <td className="px-4 py-3">
+          <span className="px-2 py-1 text-xs rounded-full border">
+            {u.role}
+          </span>
+        </td>
+
+        <td className="px-4 py-3 text-gray-400">
+          {new Date(u.createdAt).toLocaleDateString()}
+        </td>
+
+        <td className="px-4 py-3 flex gap-2">
+          <select
+            value={u.role}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => changeRole(u.uid, e.target.value)}
+            className="bg-[#0f1419] border border-gray-600 text-xs px-2 py-1 rounded"
+          >
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteUser(u.uid);
+            }}
+            className="text-red-400 text-xs"
+          >
+            Delete
+          </button>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
           </div>
         ) : tab === "admins" ? (
           <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Admin management coming soon</p>
+            <table className="w-full text-sm text-left">
+  <thead className="bg-[#111827] text-gray-400">
+    <tr>
+      <th className="px-4 py-3">Email</th>
+      <th className="px-4 py-3">Role</th>
+      <th className="px-4 py-3">Actions</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    {users
+      .filter((u) => u.role === "admin")
+      .map((u) => (
+        <tr key={u.uid} className="border-t border-gray-700">
+          <td className="px-4 py-3 text-gray-200">{u.email}</td>
+
+          <td className="px-4 py-3">
+            <span className="px-2 py-1 text-xs rounded-full border border-indigo-700 bg-indigo-900/30 text-indigo-400">
+              admin
+            </span>
+          </td>
+
+          <td className="px-4 py-3">
+            {isSuperuser && (
+              <button
+                onClick={() => changeRole(u.uid, "user")}
+                className="text-yellow-400 text-xs"
+              >
+                Remove Admin
+              </button>
+            )}
+          </td>
+        </tr>
+      ))}
+  </tbody>
+</table>
           </div>
         ) : tab === "tokens" ? (
           <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Token usage coming soon</p>
+            <div className="space-y-4 p-4">
+  {tokenUsage.map((u) => (
+    <div
+      key={u.uid}
+      onClick={() => openTokenCalls(u)}
+      className="p-4 border border-gray-700 rounded cursor-pointer hover:bg-[#111827]"
+    >
+      <p className="text-gray-200">{u.email}</p>
+
+      <div className="w-full bg-gray-800 h-2 rounded mt-2">
+        <div
+          className={`h-2 rounded ${u.limitExceeded ? "bg-red-500" : "bg-indigo-500"}`}
+          style={{ width: `${Math.min((u.totalTokens / u.limit) * 100, 100)}%` }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between mt-1">
+        <p className="text-xs text-gray-400">{u.totalTokens.toLocaleString()} / {u.limit.toLocaleString()}</p>
+        {u.limitExceeded && (
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-red-700 bg-red-900/30 text-red-400">⚠ Limit Exceeded</span>
+        )}
+      </div>
+    </div>
+  ))}
+
+  {tokenUsage.length === 0 && (
+    <p className="text-gray-500 text-sm text-center">No token data</p>
+  )}
+</div>
           </div>
         ) : tab === "audit" ? (
           <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Audit logs coming soon</p>
+            <div className="space-y-4 p-4">
+  <select
+    value={auditFilter}
+    onChange={(e) => setAuditFilter(e.target.value)}
+    className="bg-[#0f1419] border border-gray-600 px-2 py-1 text-sm"
+  >
+    {uniqueActions.map((a) => (
+      <option key={a}>{a}</option>
+    ))}
+  </select>
+
+  {filteredLogs.map((log) => {
+    const badge = actionBadge(log.action);
+    const summary = metaSummary(log.action, log.meta);
+    return (
+      <div key={log.id} className={`flex items-start gap-3 border rounded p-3 ${badge.color}`}>
+        <span className="text-base">{badge.icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-medium">{badge.label}</p>
+            <span className="text-[10px] opacity-60">{log.email}</span>
+          </div>
+          {summary && <p className="text-xs opacity-70 truncate mt-0.5">{summary}</p>}
+        </div>
+        <span className="text-[10px] opacity-60 shrink-0">{timeAgo(log.createdAt)}</span>
+      </div>
+    );
+  })}
+
+  {filteredLogs.length === 0 && (
+    <p className="text-gray-500 text-sm text-center">No logs found</p>
+  )}
+</div>
           </div>
         ) : (
           <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
-            <p className="p-4 text-sm text-gray-400">Projects coming soon</p>
+            <div className="space-y-4 p-4">
+              {projects.map((p) => (
+                <div key={p.id} className="border border-gray-700 p-4 rounded">
+                  <p className="text-gray-200 font-medium">{p.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Owner: {(p as any).ownerEmail ?? "—"}</p>
+                  <p className="text-sm text-gray-400 mt-1">Tasks: {p.taskCount ?? 0}</p>
+                  <button
+                    onClick={() => deleteProject(p.id, p.name)}
+                    className="text-red-400 text-xs mt-2 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+              {projects.length === 0 && (
+                <p className="text-gray-500 text-sm text-center">No projects found</p>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* ── User Detail Drawer ── */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="flex-1 bg-black/50" onClick={() => setSelectedUser(null)} />
+          <div className="w-[480px] bg-[#1a1f2e] border-l border-gray-700 flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+              <div>
+                <p className="text-gray-100 font-medium">{selectedUser.email}</p>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                  selectedUser.role === "admin"
+                    ? "border-indigo-700 bg-indigo-900/30 text-indigo-400"
+                    : "border-gray-600 bg-gray-800 text-gray-400"
+                }`}>{selectedUser.role}</span>
+              </div>
+              <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-gray-300 text-lg">✕</button>
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="flex border-b border-gray-700 px-4">
+              {(["overview", "projects", "activity", "tokens"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setUserTab(t)}
+                  className={`px-3 py-2 text-xs font-medium capitalize transition-colors ${
+                    userTab === t ? "border-b-2 border-indigo-500 text-indigo-400" : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {userLoading ? (
+                <div className="flex justify-center py-8">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+                </div>
+              ) : userError ? (
+                <p className="text-red-400 text-sm">{userError}</p>
+              ) : userTab === "overview" ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Projects", value: userActivity?.stats.projectCount ?? 0 },
+                      { label: "Tasks", value: userActivity?.stats.taskCount ?? 0 },
+                      { label: "Actions", value: userActivity?.stats.actionCount ?? 0 },
+                    ].map((s) => (
+                      <div key={s.label} className="bg-[#111827] rounded p-3 text-center border border-gray-700">
+                        <p className="text-xl font-semibold text-gray-100">{s.value}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <p>UID: <span className="text-gray-400 font-mono">{selectedUser.uid}</span></p>
+                    <p>Joined: <span className="text-gray-400">{new Date(selectedUser.createdAt).toLocaleDateString()}</span></p>
+                  </div>
+                </div>
+              ) : userTab === "projects" ? (
+                <div className="space-y-3">
+                  {userProjects.length === 0 && <p className="text-gray-500 text-sm">No projects</p>}
+                  {userProjects.map((p) => (
+                    <div key={p.id} className="border border-gray-700 rounded p-3">
+                      <p className="text-gray-200 text-sm font-medium">{p.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{p.taskCount} tasks · {new Date(p.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : userTab === "activity" ? (
+                <div className="space-y-2">
+                  {userActivity?.activity.length === 0 && <p className="text-gray-500 text-sm">No activity</p>}
+                  {userActivity?.activity.map((a) => {
+                    const badge = actionBadge(a.action);
+                    const summary = metaSummary(a.action, a.meta);
+                    return (
+                      <div key={a.id} className={`flex items-start gap-2 border rounded p-2 ${badge.color}`}>
+                        <span className="text-base">{badge.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium">{badge.label}</p>
+                          {summary && <p className="text-xs opacity-70 truncate">{summary}</p>}
+                        </div>
+                        <span className="text-[10px] opacity-60 shrink-0">{timeAgo(a.createdAt)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {userTokens.length === 0 && <p className="text-gray-500 text-sm">No token calls</p>}
+                  {userTokens.map((t) => (
+                    <div key={t.id} className="border border-gray-700 rounded p-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-300 font-medium">{t.agentType}</span>
+                        <span className="text-xs text-indigo-400">{t.tokensUsed} tokens</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-1">{timeAgo(t.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Token Calls Modal ── */}
+      {tokenUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setTokenUser(null)} />
+          <div className="relative bg-[#1a1f2e] border border-gray-700 rounded-lg w-[520px] max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+              <div>
+                <p className="text-gray-100 font-medium">{tokenUser.email}</p>
+                <p className="text-xs text-gray-500">{tokenUser.totalTokens} / {tokenUser.limit} tokens used</p>
+              </div>
+              <button onClick={() => setTokenUser(null)} className="text-gray-500 hover:text-gray-300 text-lg">✕</button>
+            </div>
+            <div className="overflow-y-auto p-4 space-y-2">
+              {tokenCallsLoading ? (
+                <div className="flex justify-center py-6">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+                </div>
+              ) : tokenCalls.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center">No calls found</p>
+              ) : tokenCalls.map((c) => (
+                <div key={c.id} className="border border-gray-700 rounded p-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-300 font-medium">{c.agentType}</span>
+                    <span className="text-xs text-indigo-400">{c.tokensUsed} tokens</span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className={`text-[10px] ${
+                      c.status === "COMPLETED" ? "text-emerald-400" : "text-red-400"
+                    }`}>{c.status}</span>
+                    <span className="text-[10px] text-gray-500">{timeAgo(c.createdAt)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

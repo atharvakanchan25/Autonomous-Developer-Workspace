@@ -159,6 +159,9 @@ export const api = {
       }),
   },
   admin: {
-    projects: () => request<Array<Project & { ownerEmail: string }>>("/api/admin/projects"),
-  },
+  projects: () =>
+    request<Array<Project & { ownerEmail: string; taskCount: number }>>(
+      "/api/admin/projects"
+    ),
+},
 };
