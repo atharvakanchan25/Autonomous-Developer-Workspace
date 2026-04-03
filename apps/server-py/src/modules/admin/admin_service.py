@@ -290,3 +290,101 @@ def get_audit_logs(limit: int = 100, userId: Optional[str] = None, admin: AuthUs
     except Exception as e:
         logger.error(f"Failed to fetch audit logs: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch audit logs")
+
+
+# ── Platform stats ────────────────────────────────────────────────────────────
+
+@router.get("/stats")
+def get_platform_stats(admin: AuthUser = Depends(require_role("admin"))):
+    """Aggregate platform-wide stats for the admin dashboard."""
+    try:
+        all_users = list(db.collection("users").stream())
+        all_projects = list(db.collection("projects").stream())
+        all_tasks = list(db.collection("tasks").stream())
+        all_agent_runs = list(db.collection("agentRuns").stream())
+        all_audit = list(db.collection("audit_logs").stream())
+
+        total_tokens = sum(
+            (d.to_dict().get("tokensUsed", 0) or 0)
+            for d in db.collection("agentRuns").stream()
+        ) + sum(
+            (d.to_dict().get("tokensUsed", 0) or 0)
+            for d in db.collection("aiPlanLogs").stream()
+        )
+
+        admin_count = sum(1 for d in all_users if d.to_dict().get("role") == "admin")
+        completed_tasks = sum(1 for d in all_tasks if d.to_dict().get("status") == "COMPLETED")
+        failed_runs = sum(1 for d in all_agent_runs if d.to_dict().get("status") == "FAILED")
+        completed_runs = sum(1 for d in all_agent_runs if d.to_dict().get("status") == "COMPLETED")
+
+        return {
+            "users": {"total": len(all_users), "admins": admin_count, "regular": len(all_users) - admin_count},
+            "projects": {"total": len(all_projects)},
+            "tasks": {"total": len(all_tasks), "completed": completed_tasks},
+            "agentRuns": {"total": len(all_agent_runs), "completed": completed_runs, "failed": failed_runs},
+            "auditLogs": {"total": len(all_audit)},
+            "tokens": {"total": total_tokens},
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch platform stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch stats")
+
+
+# ── Suspend / unsuspend user ──────────────────────────────────────────────────
+
+class SuspendRequest(BaseModel):
+    suspended: bool
+
+
+@router.patch("/users/{uid}/suspend")
+async def suspend_user(uid: str, body: SuspendRequest, admin: AuthUser = Depends(require_role("admin"))):
+    """Suspend or unsuspend a user account."""
+    doc = db.collection("users").document(uid).get()
+    if not doc.exists:
+        raise not_found("User")
+    db.collection("users").document(uid).update({"suspended": body.suspended, "updatedAt": now_iso()})
+    action = "USER_SUSPEND" if body.suspended else "USER_UNSUSPEND"
+    await log_action(admin, action, {"targetUser": uid})
+    return {"uid": uid, "suspended": body.suspended}
+
+
+# ── System health ─────────────────────────────────────────────────────────────
+
+@router.get("/system-health")
+def get_system_health(admin: AuthUser = Depends(require_role("admin"))):
+    """Check system health including database and queue status."""
+    try:
+        from src.queue.queue import task_queue
+
+        # Check database health
+        db_healthy = True
+        db_error = None
+        try:
+            # Simple query to test DB connection
+            list(db.collection("users").limit(1).stream())
+        except Exception as e:
+            db_healthy = False
+            db_error = str(e)
+
+        # Check queue health
+        queue_depth = task_queue._queue.qsize() if hasattr(task_queue, '_queue') else 0
+        active_jobs = len([j for j in task_queue._jobs.values() if j.state == "active"])
+        waiting_jobs = len([j for j in task_queue._jobs.values() if j.state == "waiting"])
+        failed_jobs = len([j for j in task_queue._jobs.values() if j.state == "failed"])
+
+        return {
+            "database": {
+                "healthy": db_healthy,
+                "error": db_error,
+            },
+            "queue": {
+                "depth": queue_depth,
+                "active_jobs": active_jobs,
+                "waiting_jobs": waiting_jobs,
+                "failed_jobs": failed_jobs,
+            },
+            "timestamp": now_iso(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to check system health: {e}")
+        raise HTTPException(status_code=500, detail="Failed to check system health")
