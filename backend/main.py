@@ -30,6 +30,7 @@ from backend.api.cicd.cicd_service import router as cicd_router
 from backend.api.observability.observability_service import router as observe_router
 from backend.api.admin.admin_service import router as admin_router
 from backend.api.dev.dev_service import router as dev_router
+from backend.lib.mcp_server import mcp
 
 import backend.task_queue.worker  # noqa: F401
 
@@ -106,7 +107,7 @@ async def not_found_handler(request: Request, exc: Exception):
 
 
 # Mount MCP
-# app.mount("/mcp", mcp.streamable_http_app())
+app.mount("/mcp", mcp.streamable_http_app())
 
 # Mount Socket.IO
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)

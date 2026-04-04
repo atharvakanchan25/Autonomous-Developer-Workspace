@@ -49,4 +49,5 @@ class AgentContext:
     framework: str
     taskTitle: str
     taskDescription: str
+    mcpContext: str = ""
     previousOutputs: dict[AgentType, AgentResult] = field(default_factory=dict)

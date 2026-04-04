@@ -52,6 +52,7 @@ class ScaffoldAgent:
         all_files = sorted(set(code_files + test_files))
         files_list = "\n".join(f"  - {f}" for f in all_files)
         reviews_block = "\n\n---\n\n".join(review_sections) if review_sections else "_No reviews available._"
+        mcp_context = f"\n\nWorkspace context from MCP:\n{ctx.mcpContext}" if ctx.mcpContext else ""
 
         readme_result = await call_llm([
             LlmMessage(role="system", content=(
@@ -78,6 +79,7 @@ class ScaffoldAgent:
                 f"Language: {language}{framework_hint}\n\n"
                 f"Generated files:\n{files_list}\n\n"
                 f"Code Reviews:\n{reviews_block}"
+                f"{mcp_context}"
             )),
         ], max_tokens=4096)
 
@@ -92,6 +94,7 @@ class ScaffoldAgent:
                 f"Project: {ctx.projectName}\n"
                 f"Language: {language}{framework_hint}\n"
                 f"Files: {', '.join(all_files)}"
+                f"{mcp_context}"
             )),
         ], max_tokens=1024)
 

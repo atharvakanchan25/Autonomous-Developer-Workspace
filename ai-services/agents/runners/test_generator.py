@@ -57,6 +57,7 @@ class TestGeneratorAgent:
         test_framework = TEST_FRAMEWORKS.get(language, "appropriate testing framework")
         test_dir = TEST_DIRS.get(language, "tests")
         framework_hint = f" using {framework}" if framework else ""
+        mcp_context = f"\n\nWorkspace context from MCP:\n{ctx.mcpContext}" if ctx.mcpContext else ""
 
         prev = ctx.previousOutputs.get(AgentType.CODE_GENERATOR)
         code_artifact = next((a for a in prev.artifacts if a.type == "code"), None) if prev else None
@@ -80,6 +81,7 @@ class TestGeneratorAgent:
                 f"Task: {ctx.taskTitle}\n"
                 f"Description: {ctx.taskDescription}"
                 f"{code_context}"
+                f"{mcp_context}"
             )),
         ], max_tokens=4096)
 

@@ -17,6 +17,7 @@ from realtime import emitter
 from realtime.events import AgentLogPayload, PipelineStagePayload, TaskUpdatedPayload
 from agents.agent_registry import get_agent
 from agents.agent_types import AgentType, AgentRunStatus, AgentContext, AgentResult
+from backend.lib.mcp_server import build_project_context_text, get_project_snapshot
 
 PIPELINE_ORDER = [AgentType.CODE_GENERATOR, AgentType.TEST_GENERATOR, AgentType.CODE_REVIEWER]
 
@@ -39,7 +40,7 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
         for artifact in result.result.artifacts:
             if not artifact.filename:
                 continue
-            files_ref = db.collection("projectFiles")
+            files_ref = db.collection("files")
             existing_docs = list(
                 files_ref
                 .where("projectId", "==", project_id)
@@ -66,6 +67,8 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
                     new_content = artifact.content
                 doc.reference.update({
                     "content": new_content,
+                    "path": artifact.filename,
+                    "name": artifact.filename.split("/")[-1],
                     "size": len(new_content.encode("utf-8")),
                     "language": artifact.language,
                     "updatedAt": now_iso(),
@@ -117,6 +120,8 @@ async def dispatch_agent(
     task = _get_task(task_id)
     project_id: str = task["projectId"]
     project = _get_project(project_id)
+    snapshot = get_project_snapshot(project_id, include_contents=True)
+    mcp_context = build_project_context_text(snapshot)
 
     ctx = AgentContext(
         taskId=task["id"],
@@ -127,6 +132,7 @@ async def dispatch_agent(
         framework=project.get("framework", ""),
         taskTitle=task["title"],
         taskDescription=task.get("description", task["title"]),
+        mcpContext=mcp_context,
         previousOutputs=previous_outputs,
     )
 
@@ -287,7 +293,7 @@ async def _maybe_run_scaffold(project_id: str) -> None:
             return
 
         existing = list(
-            db.collection("projectFiles")
+            db.collection("files")
             .where("projectId", "==", project_id)
             .where("path", "==", "README.md")
             .limit(1)
@@ -299,7 +305,7 @@ async def _maybe_run_scaffold(project_id: str) -> None:
         logger.info(f"All tasks complete — running scaffold for project={project_id}")
         project = _get_project(project_id)
 
-        file_docs = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
+        file_docs = list(db.collection("files").where("projectId", "==", project_id).stream())
 
         run_docs = list(
             db.collection("agentRuns")
@@ -342,6 +348,7 @@ async def _maybe_run_scaffold(project_id: str) -> None:
             framework=project.get("framework", ""),
             taskTitle="Project Scaffold",
             taskDescription="Generate README and dependency file",
+            mcpContext=build_project_context_text(get_project_snapshot(project_id, include_contents=True)),
             previousOutputs={
                 AgentType.CODE_GENERATOR: synthetic_code,
                 AgentType.TEST_GENERATOR: synthetic_test,
@@ -353,7 +360,7 @@ async def _maybe_run_scaffold(project_id: str) -> None:
         result = await scaffold.run(ctx)  # type: ignore[attr-defined]
 
         for artifact in result.artifacts:
-            db.collection("projectFiles").add({
+            db.collection("files").add({
                 "projectId": project_id,
                 "path": artifact.filename,
                 "name": artifact.filename.split("/")[-1],
