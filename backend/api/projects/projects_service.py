@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
-from firebase_admin import firestore
 from backend.core.database import db
 from backend.core.errors import not_found, bad_request
 from backend.core.utils import now_iso
@@ -39,10 +38,13 @@ class UpdateProjectRequest(BaseModel):
 @router.get("/")
 async def list_projects(user: AuthUser = Depends(get_current_user)):
     """List all projects for the current user."""
-    query = db.collection("projects").where("ownerId", "==", user.uid)
-    
-    docs = query.order_by("createdAt", direction=firestore.Query.DESCENDING).stream()
-    return [{"id": d.id, **d.to_dict()} for d in docs]
+    docs = db.collection("projects").where("ownerId", "==", user.uid).stream()
+    projects = [{"id": d.id, **d.to_dict()} for d in docs]
+    projects.sort(
+        key=lambda item: item.get("createdAt") or item.get("updatedAt") or item["id"],
+        reverse=True,
+    )
+    return projects
 
 @router.post("/")
 async def create_project(body: CreateProjectRequest, user: AuthUser = Depends(get_current_user)):

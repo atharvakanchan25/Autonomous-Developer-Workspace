@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from typing import Optional
-from firebase_admin import firestore
 from backend.core.database import db
 from backend.core.errors import not_found, bad_request
 from backend.core.utils import now_iso
@@ -83,8 +82,15 @@ async def list_tasks(
     if status:
         query = query.where("status", "==", status)
     
-    docs = query.order_by("createdAt", direction=firestore.Query.DESCENDING).stream()
-    return [serialize_task(d.id, d.to_dict()) for d in docs]
+    tasks = [serialize_task(d.id, d.to_dict()) for d in query.stream()]
+    if projectId:
+        tasks.sort(key=lambda item: (item.get("order", 0), item.get("createdAt") or item.get("updatedAt") or item["id"]))
+    else:
+        tasks.sort(
+            key=lambda item: item.get("createdAt") or item.get("updatedAt") or item["id"],
+            reverse=True,
+        )
+    return tasks
 
 @router.post("/")
 async def create_task(body: CreateTaskRequest, user: AuthUser = Depends(get_current_user)):

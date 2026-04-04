@@ -11,39 +11,110 @@ export interface AuthUserWithRole extends User {
   role: UserRole;
 }
 
-export async function fetchRole(firebaseUser: User, retries = 3): Promise<UserRole> {
+const ROLE_CACHE_KEY = "adw:user-role";
+const ROLE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let cachedRole:
+  | {
+      uid: string;
+      role: UserRole;
+      expiresAt: number;
+    }
+  | null = null;
+let inFlightRoleRequest: Promise<UserRole> | null = null;
+
+function readCachedRole(uid: string): UserRole | null {
+  if (cachedRole && cachedRole.uid === uid && cachedRole.expiresAt > Date.now()) {
+    return cachedRole.role;
+  }
+
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(ROLE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { uid: string; role: UserRole; expiresAt: number };
+    if (parsed.uid === uid && parsed.expiresAt > Date.now()) {
+      cachedRole = parsed;
+      return parsed.role;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function writeCachedRole(uid: string, role: UserRole) {
+  const value = {
+    uid,
+    role,
+    expiresAt: Date.now() + ROLE_CACHE_TTL_MS,
+  };
+  cachedRole = value;
+
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(ROLE_CACHE_KEY, JSON.stringify(value));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function clearCachedRole() {
+  cachedRole = null;
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(ROLE_CACHE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+export async function fetchRole(firebaseUser: User, retries = 2, forceRefresh = false): Promise<UserRole> {
+  if (!forceRefresh) {
+    const cached = readCachedRole(firebaseUser.uid);
+    if (cached) return cached;
+    if (inFlightRoleRequest) return inFlightRoleRequest;
+  }
+
+  const requestPromise = (async () => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      // Force refresh token to ensure backend gets latest auth state
-      const token = await firebaseUser.getIdToken(true);
+      const token = await firebaseUser.getIdToken(forceRefresh && attempt === 1);
       const res = await fetch(`${webConfig.apiUrl}/api/admin/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store', // Prevent caching
+        cache: "no-store",
       });
 
       if (res.ok) {
         const data = await res.json();
         const role = data.role === "admin" ? "admin" : "user";
-        console.log(`[useAuth] Attempt ${attempt}: User ${firebaseUser.email} has role: ${role}`);
+        writeCachedRole(firebaseUser.uid, role);
         return role;
       }
 
-      console.warn(`[useAuth] Attempt ${attempt}: /users/me returned ${res.status}`);
-      
-      // If not the last attempt, wait before retrying
       if (attempt < retries) {
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
       }
     } catch (err) {
-      console.error(`[useAuth] Attempt ${attempt} failed:`, err);
       if (attempt < retries) {
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
       }
     }
   }
 
-  console.error(`[useAuth] All ${retries} attempts failed, defaulting to 'user' role`);
   return "user";
+  })();
+
+  inFlightRoleRequest = requestPromise;
+  try {
+    return await requestPromise;
+  } finally {
+    if (inFlightRoleRequest === requestPromise) {
+      inFlightRoleRequest = null;
+    }
+  }
 }
 
 export async function getPostLoginRoute(firebaseUser: User): Promise<"/home" | "/admin"> {
@@ -66,6 +137,7 @@ export function useAuth() {
       if (firebaseUser) {
         resolveUser(firebaseUser);
       } else {
+        clearCachedRole();
         setUser(null);
         setLoading(false);
       }
@@ -77,7 +149,8 @@ export function useAuth() {
   const refetchRole = useCallback(async () => {
     const firebaseUser = auth.currentUser;
     if (!firebaseUser) return;
-    const role = await fetchRole(firebaseUser);
+    clearCachedRole();
+    const role = await fetchRole(firebaseUser, 2, true);
     setUser(prev => prev ? { ...prev, role } : null);
   }, []);
 

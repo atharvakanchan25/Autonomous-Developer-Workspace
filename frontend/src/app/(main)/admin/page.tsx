@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/useAuth";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { api } from "@/lib/api";
+import { webConfig } from "@/lib/config";
 
 interface AdminProject {
   id: string;
@@ -186,6 +187,15 @@ export default function AdminPage() {
 
   const [auditFilter, setAuditFilter] = useState<string>("ALL");
   const [auditUserFilter, setAuditUserFilter] = useState<string>("ALL");
+  const [loadedTabs, setLoadedTabs] = useState<Record<string, boolean>>({
+    overview: false,
+    users: false,
+    admins: false,
+    tokens: false,
+    audit: false,
+    projects: false,
+    system: false,
+  });
 
   useEffect(() => {
     if (!loading && !hasRole("admin")) {
@@ -195,10 +205,58 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (user && hasRole("admin") && !dataLoaded) {
-      loadData();
+      loadInitialData();
       setDataLoaded(true);
     }
   }, [user, hasRole, dataLoaded]);
+
+  useEffect(() => {
+    if (!user || !hasRole("admin") || !dataLoaded) return;
+
+    if ((tab === "users" || tab === "admins") && !loadedTabs.users) {
+      void loadUsers().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, users: true, admins: true }));
+      });
+    }
+    if (tab === "tokens" && !loadedTabs.tokens) {
+      void loadTokenUsage().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, tokens: true }));
+      });
+    }
+    if (tab === "audit" && !loadedTabs.audit) {
+      void loadAuditLogs().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, audit: true }));
+      });
+    }
+    if (tab === "projects" && !loadedTabs.projects) {
+      void loadProjects().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, projects: true }));
+      });
+    }
+    if (tab === "system" && !loadedTabs.system) {
+      void loadSystemHealth().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, system: true }));
+      });
+    }
+  }, [user, hasRole, dataLoaded, tab, loadedTabs]);
+
+  async function loadInitialData() {
+    setLoadingData(true);
+    setPanelError(null);
+    await Promise.all([
+      loadStats(),
+      loadSystemHealth(),
+      loadUsers(),
+    ]);
+    setLoadedTabs((prev) => ({
+      ...prev,
+      overview: true,
+      users: true,
+      admins: true,
+      system: true,
+    }));
+    setLoadingData(false);
+  }
 
   async function loadData() {
     setLoadingData(true);
@@ -211,6 +269,15 @@ export default function AdminPage() {
       loadProjects(),
       loadTokenUsage()
     ]);
+    setLoadedTabs({
+      overview: true,
+      users: true,
+      admins: true,
+      tokens: true,
+      audit: true,
+      projects: true,
+      system: true,
+    });
     setLoadingData(false);
   }
 
@@ -218,7 +285,7 @@ export default function AdminPage() {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/stats`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -234,7 +301,7 @@ export default function AdminPage() {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/system-health`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/system-health`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -272,9 +339,9 @@ export default function AdminPage() {
 
   async function loadUsers() {
     try {
-      const token = await auth.currentUser?.getIdToken(true);
+      const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -291,7 +358,7 @@ export default function AdminPage() {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/audit-logs?limit=200`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/audit-logs?limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -321,17 +388,17 @@ export default function AdminPage() {
     setUserLoading(true);
     setUserError(null);
     try {
-      const token = await auth.currentUser?.getIdToken(true);
+      const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("No auth token");
 
       const [actRes, projRes, tokRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${u.uid}/activity`, {
+        fetch(`${webConfig.apiUrl}/api/admin/users/${u.uid}/activity`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${u.uid}/projects`, {
+        fetch(`${webConfig.apiUrl}/api/admin/users/${u.uid}/projects`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/token-usage/${u.uid}`, {
+        fetch(`${webConfig.apiUrl}/api/admin/token-usage/${u.uid}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -349,7 +416,7 @@ export default function AdminPage() {
   async function changeRole(uid: string, role: string) {
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${uid}/role`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users/${uid}/role`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ role }),
@@ -367,7 +434,7 @@ export default function AdminPage() {
   async function suspendUser(uid: string, suspended: boolean) {
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${uid}/suspend`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users/${uid}/suspend`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ suspended }),
@@ -385,7 +452,7 @@ export default function AdminPage() {
     if (!confirm("Delete this user?")) return;
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${uid}`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users/${uid}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

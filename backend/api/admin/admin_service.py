@@ -158,6 +158,75 @@ def _token_summary_for_user(user_doc: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _task_counts_by_project() -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for doc in db.collection("tasks").stream():
+        project_id = doc.to_dict().get("projectId")
+        if not project_id:
+            continue
+        counts[project_id] = counts.get(project_id, 0) + 1
+    return counts
+
+
+def _token_usage_by_user() -> dict[str, dict[str, Any]]:
+    task_owner_by_id: dict[str, str] = {}
+    usage: dict[str, dict[str, Any]] = {}
+
+    for doc in db.collection("tasks").stream():
+        data = doc.to_dict()
+        owner_id = data.get("ownerId")
+        if owner_id:
+            task_owner_by_id[doc.id] = owner_id
+
+    for doc in db.collection("agentRuns").stream():
+        run = doc.to_dict()
+        owner_id = task_owner_by_id.get(run.get("taskId"))
+        if not owner_id:
+            continue
+        entry = usage.setdefault(owner_id, {
+            "totalTokens": 0,
+            "agentTokens": 0,
+            "plannerTokens": 0,
+            "callCount": 0,
+            "agentCalls": 0,
+            "plannerCalls": 0,
+            "lastCallAt": None,
+        })
+        tokens = int(run.get("tokensUsed", 0) or 0)
+        created_at = run.get("createdAt")
+        entry["totalTokens"] += tokens
+        entry["agentTokens"] += tokens
+        entry["callCount"] += 1
+        entry["agentCalls"] += 1
+        if created_at and (not entry["lastCallAt"] or created_at > entry["lastCallAt"]):
+            entry["lastCallAt"] = created_at
+
+    for doc in db.collection("aiPlanRuns").stream():
+        run = doc.to_dict()
+        owner_id = run.get("uid")
+        if not owner_id:
+            continue
+        entry = usage.setdefault(owner_id, {
+            "totalTokens": 0,
+            "agentTokens": 0,
+            "plannerTokens": 0,
+            "callCount": 0,
+            "agentCalls": 0,
+            "plannerCalls": 0,
+            "lastCallAt": None,
+        })
+        tokens = int(run.get("tokensUsed", 0) or 0)
+        created_at = run.get("createdAt")
+        entry["totalTokens"] += tokens
+        entry["plannerTokens"] += tokens
+        entry["callCount"] += 1
+        entry["plannerCalls"] += 1
+        if created_at and (not entry["lastCallAt"] or created_at > entry["lastCallAt"]):
+            entry["lastCallAt"] = created_at
+
+    return usage
+
+
 @router.get("/users/me")
 async def get_current_user_info(user: AuthUser = Depends(get_current_user)):
     """Get current user information."""
@@ -306,6 +375,7 @@ async def list_audit_logs(
 
 @router.get("/projects")
 async def list_projects(user: AuthUser = Depends(require_role("admin"))):
+    task_counts = _task_counts_by_project()
     projects = sorted(
         _list_docs("projects"),
         key=lambda project: project.get("createdAt", ""),
@@ -315,7 +385,7 @@ async def list_projects(user: AuthUser = Depends(require_role("admin"))):
         {
             **project,
             "ownerEmail": project.get("ownerEmail", ""),
-            "taskCount": _safe_task_count(project["id"]),
+            "taskCount": task_counts.get(project["id"], 0),
         }
         for project in projects
     ]
@@ -414,12 +484,25 @@ async def admin_delete_project(
 @router.get("/token-usage")
 async def list_token_usage(user: AuthUser = Depends(require_role("admin"))):
     users = _canonical_users()
+    usage = _token_usage_by_user()
     return [
-        _token_summary_for_user({
+        {
             "uid": item.get("uid", item["id"]),
             "email": item.get("email", ""),
             "role": _normalize_role(item.get("role", "user")),
-        })
+            "totalTokens": usage.get(item.get("uid", item["id"]), {}).get("totalTokens", 0),
+            "agentTokens": usage.get(item.get("uid", item["id"]), {}).get("agentTokens", 0),
+            "plannerTokens": usage.get(item.get("uid", item["id"]), {}).get("plannerTokens", 0),
+            "callCount": usage.get(item.get("uid", item["id"]), {}).get("callCount", 0),
+            "agentCalls": usage.get(item.get("uid", item["id"]), {}).get("agentCalls", 0),
+            "plannerCalls": usage.get(item.get("uid", item["id"]), {}).get("plannerCalls", 0),
+            "lastCallAt": usage.get(item.get("uid", item["id"]), {}).get("lastCallAt"),
+            "limit": TOKEN_LIMIT,
+            "remaining": max(TOKEN_LIMIT - usage.get(item.get("uid", item["id"]), {}).get("totalTokens", 0), 0),
+            "limitExceeded": usage.get(item.get("uid", item["id"]), {}).get("totalTokens", 0) > TOKEN_LIMIT,
+            "usagePercent": round((usage.get(item.get("uid", item["id"]), {}).get("totalTokens", 0) / TOKEN_LIMIT) * 100, 2) if TOKEN_LIMIT else 0,
+            "isActive": usage.get(item.get("uid", item["id"]), {}).get("callCount", 0) > 0,
+        }
         for item in users
     ]
 

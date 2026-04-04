@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import type { Project, Task } from "@/types";
 import { PageShell } from "@/components/PageShell";
+import { invalidateProjectSelectCache } from "@/components/ProjectSelect";
 import { duration, ease, cardHover, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -113,6 +114,7 @@ export default function ProjectsPage() {
     setCreateError(null);
     try {
       await api.projects.create({ name: name.trim(), description: desc.trim() || undefined });
+      invalidateProjectSelectCache();
       setName(""); setDesc(""); setShowForm(false);
       await load();
     } catch (err) {
@@ -127,6 +129,7 @@ export default function ProjectsPage() {
     setDeletingId(p.id);
     try {
       await api.projects.delete(p.id);
+      invalidateProjectSelectCache();
       setProjects((prev) => prev.filter((x) => x.id !== p.id));
     } catch {
       // ignore
