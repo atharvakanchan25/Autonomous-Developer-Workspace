@@ -18,12 +18,31 @@ router = APIRouter()
 STAGES = [
     {"name": "tests",  "fail_rate": 0.1,  "min_ms": 1500, "max_ms": 2500,
      "pass_detail": "All tests passed",
-     "fail_detail": "2 tests failed — assertion error in handler_test.py"},
+     "fail_detail": "2 tests failed — assertion error in handler_test.py",
+     "logs": [
+         "🔍 Discovering test files...",
+         "📦 Installing test dependencies...",
+         "🧪 Running pytest...",
+         "✅ test_auth.py passed",
+         "✅ test_projects.py passed",
+         "✅ test_tasks.py passed",
+     ]},
     {"name": "build",  "fail_rate": 0.05, "min_ms": 2000, "max_ms": 3500,
      "pass_detail": "Build succeeded — 0 errors, 0 warnings",
-     "fail_detail": "TypeError: unsupported operand type(s) for +: 'int' and 'str'"},
+     "fail_detail": "TypeError: unsupported operand type(s) for +: 'int' and 'str'",
+     "logs": [
+         "🔧 Compiling source files...",
+         "📦 Bundling dependencies...",
+         "🗜 Optimizing assets...",
+         "✅ Build completed successfully",
+     ]},
     {"name": "deploy", "fail_rate": 0.0,  "min_ms": 800,  "max_ms": 1400,
-     "pass_detail": "", "fail_detail": ""},
+     "pass_detail": "", "fail_detail": "",
+     "logs": [
+         "🚀 Preparing deployment package...",
+         "📡 Connecting to platform...",
+         "⬆ Uploading files...",
+     ]},
 ]
 
 
@@ -43,9 +62,8 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
         raise not_found("Project")
 
     seed = f"{project_id}{task_id or ''}"
-    
-    # Determine platform-specific preview URL
     platform_name = platform or "default"
+
     deploy_ref = db.collection("deployments").add({
         "projectId": project_id, "taskId": task_id,
         "platform": platform_name,
@@ -56,9 +74,11 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
     log: list[dict] = []
 
     logger.info(f"CI/CD pipeline started: deployment={deployment_id} platform={platform_name}")
+    await emitter.emit_cicd_log(project_id, deployment_id, "pipeline", f"🚀 Pipeline started for {platform_name.title()} deployment")
 
     for stage in STAGES:
         duration_ms = random.randint(stage["min_ms"], stage["max_ms"])
+        step_delay = (duration_ms / 1000) / len(stage["logs"])
 
         log.append({"stage": stage["name"], "status": "running"})
         deploy_ref.update({"log": log, "updatedAt": now_iso()})
@@ -68,10 +88,12 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
             log=_stage_logs(log), updatedAt=now_iso(),
         ))
 
-        await asyncio.sleep(duration_ms / 1000)
+        # Stream each log line with delay
+        for line in stage["logs"]:
+            await asyncio.sleep(step_delay)
+            await emitter.emit_cicd_log(project_id, deployment_id, stage["name"], line)
 
         if stage["name"] == "deploy":
-            # Generate platform-specific preview URL
             if platform == "vercel":
                 preview_url = f"https://adw-{deployment_id[-8:]}.vercel.app"
             elif platform == "github":
@@ -80,7 +102,8 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
                 preview_url = f"http://adw-{deployment_id[-8:]}.rf.gd"
             else:
                 preview_url = f"https://preview-{deployment_id[-8:]}.adw-deploy.example.com"
-            
+
+            await emitter.emit_cicd_log(project_id, deployment_id, stage["name"], f"✅ Deployed → {preview_url}")
             log[-1] = {"stage": "deploy", "status": "passed", "durationMs": duration_ms,
                        "detail": f"Deployed to {platform_name.title()} → {preview_url}"}
             deploy_ref.update({"status": "SUCCESS", "previewUrl": preview_url, "log": log, "updatedAt": now_iso()})
@@ -89,7 +112,8 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
                 status="SUCCESS", previewUrl=preview_url,
                 log=_stage_logs(log), updatedAt=now_iso(),
             ))
-            logger.info(f"CI/CD succeeded: deployment={deployment_id} platform={platform_name} preview={preview_url}")
+            await emitter.emit_cicd_log(project_id, deployment_id, "pipeline", "🎉 Pipeline completed successfully!")
+            logger.info(f"CI/CD succeeded: deployment={deployment_id} preview={preview_url}")
             return
 
         passed = _deterministic_pass(seed + stage["name"], stage["fail_rate"])
@@ -99,6 +123,8 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
         deploy_ref.update({"log": log, "updatedAt": now_iso()})
 
         if not passed:
+            await emitter.emit_cicd_log(project_id, deployment_id, stage["name"], f"❌ {detail}", level="error")
+            await emitter.emit_cicd_log(project_id, deployment_id, "pipeline", f"💥 Pipeline failed at {stage['name']} stage", level="error")
             deploy_ref.update({"status": "FAILED", "errorMsg": detail, "updatedAt": now_iso()})
             await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
                 deploymentId=deployment_id, projectId=project_id, taskId=task_id,
@@ -108,6 +134,7 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
             logger.warning(f"CI/CD failed at {stage['name']}: deployment={deployment_id}")
             return
 
+        await emitter.emit_cicd_log(project_id, deployment_id, stage["name"], f"✅ {detail}")
         await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
             deploymentId=deployment_id, projectId=project_id, taskId=task_id,
             status="RUNNING", stage=stage["name"],
@@ -118,12 +145,11 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: O
 class TriggerCicdRequest(BaseModel):
     projectId: str
     taskId: Optional[str] = None
-    platform: Optional[str] = None  # vercel, github, infinityfree
+    platform: Optional[str] = None
 
 
 @router.post("/deploy")
 async def trigger_cicd(body: TriggerCicdRequest, user: AuthUser = Depends(get_current_user)):
-    """Trigger CI/CD pipeline for a project."""
     project_doc = db.collection("projects").document(body.projectId).get()
     if not project_doc.exists:
         raise not_found("Project")
@@ -139,7 +165,6 @@ async def trigger_cicd(body: TriggerCicdRequest, user: AuthUser = Depends(get_cu
 
 @router.get("/deployments")
 async def list_deployments(projectId: str, user: AuthUser = Depends(get_current_user)):
-    """List deployments for a project."""
     project_doc = db.collection("projects").document(projectId).get()
     if not project_doc.exists:
         raise not_found("Project")
@@ -159,7 +184,6 @@ async def list_deployments(projectId: str, user: AuthUser = Depends(get_current_
 
 @router.get("/deployments/{deployment_id}")
 async def get_deployment(deployment_id: str, user: AuthUser = Depends(get_current_user)):
-    """Get deployment details."""
     doc = db.collection("deployments").document(deployment_id).get()
     if not doc.exists:
         raise not_found("Deployment")

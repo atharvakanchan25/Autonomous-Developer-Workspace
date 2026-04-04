@@ -40,3 +40,28 @@ async def emit_pipeline_stage(payload: PipelineStagePayload):
 
 async def emit_deployment_updated(payload: DeploymentUpdatedPayload):
     await sio.emit("deployment:updated", payload.model_dump(mode="json"), room=_room(payload.projectId))
+
+
+async def emit_cicd_log(project_id: str, deployment_id: str, stage: str, message: str, level: str = "info"):
+    """Emit a real-time CI/CD log line to the frontend."""
+    payload = {
+        "deploymentId": deployment_id,
+        "projectId": project_id,
+        "stage": stage,
+        "message": message,
+        "level": level,
+        "timestamp": now_iso(),
+    }
+    try:
+        db.collection("observabilityLogs").add({
+            "level": level.upper(),
+            "source": "cicd",
+            "message": message,
+            "projectId": project_id,
+            "deploymentId": deployment_id,
+            "stage": stage,
+            "createdAt": now_iso(),
+        })
+    except Exception as e:
+        logger.warning(f"Failed to persist cicd log: {e}")
+    await sio.emit("cicd:log", payload, room=_room(project_id))
