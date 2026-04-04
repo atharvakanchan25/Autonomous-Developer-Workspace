@@ -42,16 +42,18 @@ def _check_project_access(project_id: str, user: AuthUser):
 @router.get("/")
 async def list_tasks(projectId: Optional[str] = Query(None), user: AuthUser = Depends(get_current_user)):
     """List tasks, optionally filtered by project."""
-    query = db.collection("tasks").order_by("createdAt", direction="DESCENDING")
+    col = db.collection("tasks")
 
     if projectId:
         _check_project_access(projectId, user)
-        query = query.where("projectId", "==", projectId)
+        query = col.where("projectId", "==", projectId).order_by("createdAt", direction="DESCENDING")
     elif not user.is_admin():
         owned_projects = [d.id for d in db.collection("projects").where("ownerId", "==", user.uid).stream()]
         if not owned_projects:
             return []
-        query = query.where("projectId", "in", owned_projects)
+        query = col.where("projectId", "in", owned_projects).order_by("createdAt", direction="DESCENDING")
+    else:
+        query = col.order_by("createdAt", direction="DESCENDING")
 
     return [{"id": d.id, **d.to_dict()} for d in query.stream()]
 
