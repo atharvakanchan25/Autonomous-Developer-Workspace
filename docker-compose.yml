@@ -5,6 +5,7 @@ services:
     build:
       context: ./apps/server-py
       dockerfile: Dockerfile
+    container_name: adw-backend
     ports:
       - "4000:4000"
     env_file:
@@ -13,6 +14,8 @@ services:
       - APP_ENV=production
       - PORT=4000
     restart: unless-stopped
+    networks:
+      - devops-app_default
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
@@ -23,13 +26,20 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
+    container_name: adw-frontend
     ports:
       - "3000:3000"
     env_file:
       - ./apps/web/.env.local
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://backend:4000
+      - NEXT_PUBLIC_API_URL=http://adw-backend:4000
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - devops-app_default
+
+networks:
+  devops-app_default:
+    external: true
