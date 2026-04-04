@@ -1,7 +1,7 @@
 from typing import Optional
 
 import firebase_admin
-from firebase_admin import auth as firebase_auth, credentials
+from firebase_admin import auth as firebase_auth
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -9,17 +9,6 @@ from src.core.config import config
 from src.core.database import db
 from src.core.utils import now_iso
 from src.core.logger import logger
-
-# Initialize Firebase Admin SDK once
-if not firebase_admin._apps:
-    cred = credentials.Certificate({
-        "type": "service_account",
-        "project_id": config.FIREBASE_PROJECT_ID,
-        "client_email": config.FIREBASE_CLIENT_EMAIL,
-        "private_key": config.FIREBASE_PRIVATE_KEY.replace("\\n", "\n"),
-        "token_uri": "https://oauth2.googleapis.com/token",
-    })
-    firebase_admin.initialize_app(cred)
 
 _bearer = HTTPBearer(auto_error=False)
 ROLES = ("user", "admin")
@@ -60,19 +49,22 @@ async def get_current_user(
     uid = decoded["uid"]
     email = decoded.get("email", "")
 
-    # Fetch role from database - database is the source of truth
+    admin_emails = [e.strip() for e in config.ADMIN_EMAILS.split(",") if e.strip()]
+
+    # Fetch role from Firestore — single source of truth across all machines
     doc = db.collection("users").document(uid).get()
     if doc.exists:
         user_data = doc.to_dict()
         role = user_data.get("role", "user")
-        logger.info(f"Auth check: {email} -> role from DB: {role}")
+        # Auto-upgrade to admin if email is in ADMIN_EMAILS
+        if email in admin_emails and role != "admin":
+            db.collection("users").document(uid).update({"role": "admin", "updatedAt": now_iso()})
+            role = "admin"
+            logger.info(f"Auto-upgraded {email} to admin via ADMIN_EMAILS")
+        logger.info(f"Auth check: {email} -> role: {role}")
     else:
-        # Clean up any stale email-keyed placeholder docs first
-        for ed in db.collection("users").where("email", "==", email).stream():
-            ed.reference.delete()
-
-        # Create new user with default "user" role
-        role = "user"
+        # New user — assign role based on ADMIN_EMAILS
+        role = "admin" if email in admin_emails else "user"
         db.collection("users").document(uid).set({
             "uid": uid,
             "email": email,
