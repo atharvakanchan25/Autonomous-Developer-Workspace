@@ -45,7 +45,6 @@ async def list_tasks(
             return []
         query = query.where("projectId", "==", projectId)
     elif not user.is_admin():
-        # Non-admin users only see their own tasks
         query = query.where("ownerId", "==", user.uid)
     
     if status:
