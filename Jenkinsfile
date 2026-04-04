@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         COMPOSE_FILE = 'docker-compose.yml'
-        BACKEND_URL  = 'http://adw-backend:4000/health'
     }
 
     stages {
@@ -18,28 +17,28 @@ pipeline {
         stage('Build Backend') {
             steps {
                 echo '🐍 Building backend Docker image...'
-                bat 'docker build -t adw-backend ./apps/server-py'
+                sh 'docker build -t adw-backend ./apps/server-py'
             }
         }
 
         stage('Build Frontend') {
             steps {
                 echo '⚛️ Building frontend Docker image...'
-                bat 'docker build -t adw-frontend ./apps/web'
+                sh 'docker build -t adw-frontend ./apps/web'
             }
         }
 
         stage('Stop Old Containers') {
             steps {
                 echo '🛑 Stopping old containers...'
-                bat 'docker rm -f adw-backend adw-frontend || exit 0'
+                sh 'docker rm -f adw-backend adw-frontend || true'
             }
         }
 
         stage('Deploy') {
             steps {
                 echo '🚀 Starting containers...'
-                bat 'docker-compose up -d --build'
+                sh 'docker-compose up -d --build'
             }
         }
 
@@ -47,7 +46,7 @@ pipeline {
             steps {
                 echo '❤️ Checking backend health...'
                 sleep(time: 10, unit: 'SECONDS')
-                bat 'docker exec adw-backend curl -f http://localhost:4000/health || exit 1'
+                sh 'docker exec adw-backend curl -f http://localhost:4000/health || exit 1'
             }
         }
     }
@@ -60,7 +59,7 @@ pipeline {
         }
         failure {
             echo '❌ Deployment failed! Check logs above.'
-            bat 'docker-compose logs --tail=50'
+            sh 'docker-compose logs --tail=50 || true'
         }
     }
 }
