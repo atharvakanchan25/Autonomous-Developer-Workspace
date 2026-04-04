@@ -204,7 +204,7 @@ export default function DeployPage() {
                 transition={{ duration: duration.slow, delay: i * 0.07 }}
               >
                 <div
-                  className={`group relative cursor-pointer rounded-2xl border bg-gradient-to-br ${p.gradient} ${p.border} p-5 transition-all duration-200`}
+                  className={`group relative cursor-pointer rounded-2xl border bg-gradient-to-br ${p.gradient} ${p.border} p-5 transition-all duration-200 hover:shadow-lg`}
                   onClick={() => setExpandedPlatform(expandedPlatform === p.id ? null : p.id)}
                 >
                   {/* Header */}
@@ -254,13 +254,12 @@ export default function DeployPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/5 py-2 text-xs font-medium text-gray-200 transition-colors hover:bg-white/10"
+                            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 py-3 text-sm font-semibold text-white transition-all hover:from-indigo-500/30 hover:to-purple-500/30 hover:border-white/30 hover:shadow-lg"
                           >
-                            Open {p.name}
-                            <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
-                              <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" />
-                              <path d="M3.5 6.75a.75.75 0 00-1.5 0v6a.75.75 0 00.75.75h6a.75.75 0 000-1.5H3.5v-5.25z" />
+                            <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
+                              <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
                             </svg>
+                            Deploy to {p.name}
                           </a>
                         </div>
                       </motion.div>

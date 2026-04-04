@@ -132,10 +132,10 @@ export const api = {
     },
   },
   cicd: {
-    trigger: (projectId: string, taskId?: string) =>
+    trigger: (projectId: string, taskId?: string, platform?: string) =>
       request<{ message: string }>("/api/cicd/deploy", {
         method: "POST",
-        body: JSON.stringify({ projectId, taskId }),
+        body: JSON.stringify({ projectId, taskId, platform }),
       }),
     list: (projectId: string) =>
       request<Deployment[]>(`/api/cicd/deployments?projectId=${projectId}`),

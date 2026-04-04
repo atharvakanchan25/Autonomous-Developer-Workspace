@@ -38,20 +38,24 @@ def _stage_logs(log: list[dict]) -> list[CicdStageLog]:
     return [CicdStageLog(**e) for e in log]
 
 
-async def run_cicd_pipeline(project_id: str, task_id: Optional[str]) -> None:
+async def run_cicd_pipeline(project_id: str, task_id: Optional[str], platform: Optional[str] = None) -> None:
     if not db.collection("projects").document(project_id).get().exists:
         raise not_found("Project")
 
     seed = f"{project_id}{task_id or ''}"
+    
+    # Determine platform-specific preview URL
+    platform_name = platform or "default"
     deploy_ref = db.collection("deployments").add({
         "projectId": project_id, "taskId": task_id,
+        "platform": platform_name,
         "status": "RUNNING", "log": [],
         "createdAt": now_iso(), "updatedAt": now_iso(),
     })[1]
     deployment_id = deploy_ref.id
     log: list[dict] = []
 
-    logger.info(f"CI/CD pipeline started: deployment={deployment_id}")
+    logger.info(f"CI/CD pipeline started: deployment={deployment_id} platform={platform_name}")
 
     for stage in STAGES:
         duration_ms = random.randint(stage["min_ms"], stage["max_ms"])
@@ -67,16 +71,25 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str]) -> None:
         await asyncio.sleep(duration_ms / 1000)
 
         if stage["name"] == "deploy":
-            preview_url = f"https://preview-{deployment_id[-8:]}.adw-deploy.example.com"
+            # Generate platform-specific preview URL
+            if platform == "vercel":
+                preview_url = f"https://adw-{deployment_id[-8:]}.vercel.app"
+            elif platform == "github":
+                preview_url = f"https://username.github.io/adw-{deployment_id[-8:]}"
+            elif platform == "infinityfree":
+                preview_url = f"http://adw-{deployment_id[-8:]}.rf.gd"
+            else:
+                preview_url = f"https://preview-{deployment_id[-8:]}.adw-deploy.example.com"
+            
             log[-1] = {"stage": "deploy", "status": "passed", "durationMs": duration_ms,
-                       "detail": f"Preview deployed to {preview_url}"}
+                       "detail": f"Deployed to {platform_name.title()} → {preview_url}"}
             deploy_ref.update({"status": "SUCCESS", "previewUrl": preview_url, "log": log, "updatedAt": now_iso()})
             await emitter.emit_deployment_updated(DeploymentUpdatedPayload(
                 deploymentId=deployment_id, projectId=project_id, taskId=task_id,
                 status="SUCCESS", previewUrl=preview_url,
                 log=_stage_logs(log), updatedAt=now_iso(),
             ))
-            logger.info(f"CI/CD succeeded: deployment={deployment_id} preview={preview_url}")
+            logger.info(f"CI/CD succeeded: deployment={deployment_id} platform={platform_name} preview={preview_url}")
             return
 
         passed = _deterministic_pass(seed + stage["name"], stage["fail_rate"])
@@ -105,6 +118,7 @@ async def run_cicd_pipeline(project_id: str, task_id: Optional[str]) -> None:
 class TriggerCicdRequest(BaseModel):
     projectId: str
     taskId: Optional[str] = None
+    platform: Optional[str] = None  # vercel, github, infinityfree
 
 
 @router.post("/deploy")
@@ -118,9 +132,9 @@ async def trigger_cicd(body: TriggerCicdRequest, user: AuthUser = Depends(get_cu
     if not user.can_access_resource(project_data.get("ownerId")):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    asyncio.create_task(run_cicd_pipeline(body.projectId, body.taskId))
-    await log_action(user, "CICD_TRIGGER", {"projectId": body.projectId, "taskId": body.taskId})
-    return {"message": "CI/CD pipeline triggered"}
+    asyncio.create_task(run_cicd_pipeline(body.projectId, body.taskId, body.platform))
+    await log_action(user, "CICD_TRIGGER", {"projectId": body.projectId, "taskId": body.taskId, "platform": body.platform or "default"})
+    return {"message": f"CI/CD pipeline triggered for {body.platform or 'default'} deployment"}
 
 
 @router.get("/deployments")
