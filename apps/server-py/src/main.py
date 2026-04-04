@@ -13,17 +13,10 @@ import socketio
 from src.core.config import config
 from src.core.logger import logger
 from src.core.database import db
+from src.api import api_router
 from src.realtime.server import sio
 from src.lib.mcp_server import mcp
-from src.agents.agent_service import bootstrap_agents, router as agents_router
-from src.modules.projects.projects_service import router as projects_router
-from src.modules.tasks.tasks_service import router as tasks_router
-from src.modules.ai.ai_service import router as ai_router
-from src.modules.files.files_service import router as files_router
-from src.modules.cicd.cicd_service import router as cicd_router
-from src.modules.observability.observability_service import router as observe_router
-from src.modules.admin.admin_service import router as admin_router
-from src.modules.dev.dev_service import router as dev_router
+from src.agents.agent_service import bootstrap_agents
 from src.queue.queue import task_queue
 
 import src.queue.worker  # noqa: F401 — registers the job handler as a side effect
@@ -66,15 +59,7 @@ app.add_middleware(
 )
 
 # ── Routes ────────────────────────────────────────────────────────────────────
-app.include_router(projects_router, prefix="/api/projects")
-app.include_router(tasks_router,    prefix="/api/tasks")
-app.include_router(ai_router,       prefix="/api/ai")
-app.include_router(agents_router,   prefix="/api/agents")
-app.include_router(files_router,    prefix="/api/files")
-app.include_router(cicd_router,     prefix="/api/cicd")
-app.include_router(observe_router,  prefix="/api/observe")
-app.include_router(admin_router,    prefix="/api/admin")
-app.include_router(dev_router,      prefix="/api/dev")
+app.include_router(api_router, prefix="/api")
 
 
 @app.get("/health")

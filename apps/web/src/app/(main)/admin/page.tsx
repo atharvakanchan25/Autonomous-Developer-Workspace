@@ -7,6 +7,12 @@ import { auth } from "@/lib/firebase";
 import { api } from "@/lib/api";
 import type { Project } from "@/types";
 
+type AdminProject = Project & {
+  ownerId: string;
+  ownerEmail: string;
+  taskCount: number;
+};
+
 interface User {
   id: string;
   uid: string;
@@ -148,7 +154,7 @@ export default function AdminPage() {
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<AdminProject[]>([]);
   const [tab, setTab] = useState<"overview" | "users" | "admins" | "tokens" | "audit" | "projects" | "system">("overview");
   const [loadingData, setLoadingData] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
