@@ -23,14 +23,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   if (checking) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0f1419]">
-        <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+      <div className="app-shell flex h-screen items-center justify-center">
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-[var(--accent)]" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="app-shell flex h-screen overflow-hidden">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         {children}

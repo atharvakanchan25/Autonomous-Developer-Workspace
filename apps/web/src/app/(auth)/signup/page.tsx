@@ -94,10 +94,10 @@ function InputField({
           id={id} type={type} value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder} autoComplete={autoComplete}
-          className={`w-full rounded-lg border bg-[#0f1419] py-2.5 pl-9 ${rightSlot ? "pr-10" : "pr-4"} text-sm text-gray-100 placeholder-gray-600 outline-none transition-colors focus:ring-2 ${
+          className={`app-input w-full rounded-2xl py-3 pl-9 ${rightSlot ? "pr-10" : "pr-4"} text-sm outline-none ${
             error
               ? "border-red-500/60 focus:border-red-500 focus:ring-red-900/40"
-              : "border-gray-700 focus:border-indigo-500 focus:ring-indigo-900/40"
+              : ""
           }`}
         />
         {rightSlot && <span className="absolute inset-y-0 right-3 flex items-center">{rightSlot}</span>}
@@ -121,7 +121,7 @@ function SocialButton({ icon, label, onClick, loading }: {
   return (
     <motion.button
       type="button" onClick={onClick} disabled={loading}
-      className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-700 bg-[#1a1f2e] px-4 py-2.5 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-[#252b3b] hover:text-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+      className="app-button-secondary flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
       whileTap={buttonTap} transition={{ duration: duration.fast }}
     >
       {loading ? <Spinner /> : icon}
@@ -218,18 +218,18 @@ export default function SignupPage() {
 
   return (
     <motion.div className="w-full max-w-sm" variants={fadeUp} initial="hidden" animate="visible">
-      <div className="rounded-xl border border-gray-700 bg-[#1a1f2e] p-8 shadow-2xl">
+      <div className="app-panel-strong rounded-[28px] p-8">
 
         {/* Logo + heading */}
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-lg shadow-indigo-900/40">
-            <svg viewBox="0 0 16 16" fill="white" className="h-5 w-5">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--accent),#0f766e)] text-[var(--accent-contrast)] shadow-[0_18px_32px_rgba(20,184,166,0.24)]">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="h-5 w-5">
               <path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 1.5L14 6v4.5L8 14 2 10.5V6L8 2.5z" />
             </svg>
           </div>
           <div className="text-center">
-            <h1 className="text-lg font-semibold text-gray-100">Create an account</h1>
-            <p className="mt-0.5 text-xs text-gray-500">Start building with ADW today</p>
+            <h1 className="app-title text-2xl font-semibold text-gray-100">Create an account</h1>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">Start building with ADW today</p>
           </div>
         </div>
 
@@ -237,7 +237,7 @@ export default function SignupPage() {
         <AnimatePresence>
           {errors.form && (
             <motion.div
-              className="mb-5 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-900/20 px-3.5 py-2.5"
+              className="mb-5 flex items-center gap-2 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3"
               initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: duration.standard, ease: ease.enter }}
@@ -292,7 +292,7 @@ export default function SignupPage() {
 
           <motion.button
             type="submit" disabled={loading}
-            className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-button-primary mt-1 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
             whileTap={!loading ? buttonTap : {}} transition={{ duration: duration.fast }}
           >
             {loading ? <><Spinner />Creating account…</> : "Create account"}
@@ -301,9 +301,9 @@ export default function SignupPage() {
 
         <div className="my-6">
           <div className="flex items-center gap-3">
-            <span className="h-px flex-1 bg-gray-700" />
-            <span className="text-xs text-gray-600">or sign up with</span>
-            <span className="h-px flex-1 bg-gray-700" />
+            <span className="h-px flex-1 bg-white/10" />
+            <span className="text-xs text-[var(--text-muted)]">or sign up with</span>
+            <span className="h-px flex-1 bg-white/10" />
           </div>
         </div>
 
@@ -316,7 +316,7 @@ export default function SignupPage() {
 
         <p className="mt-6 text-center text-xs text-gray-500">
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-indigo-400 transition-colors hover:text-indigo-300">
+          <Link href="/login" className="font-medium text-[var(--accent)] transition-colors hover:text-white">
             Sign in
           </Link>
         </p>

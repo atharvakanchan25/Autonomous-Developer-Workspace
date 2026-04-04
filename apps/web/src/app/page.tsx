@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { getPostLoginRoute } from "@/lib/useAuth";
 
 export default function RootPage() {
   const router = useRouter();
@@ -11,7 +12,9 @@ export default function RootPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) {
-        router.replace("/home");
+        void (async () => {
+          router.replace(await getPostLoginRoute(user));
+        })();
       } else {
         router.replace("/login");
       }
