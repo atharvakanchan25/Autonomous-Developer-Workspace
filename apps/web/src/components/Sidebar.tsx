@@ -135,20 +135,99 @@ export function Sidebar() {
     <aside className="app-panel-strong relative m-3 flex h-[calc(100vh-1.5rem)] w-[228px] shrink-0 flex-col overflow-hidden rounded-[28px]">
       {/* Logo */}
       <div className="flex h-20 items-center border-b border-white/10 px-6">
-        <Link href="/home" className="flex items-center gap-2.5">
+        <Link href="/home" className="flex items-center gap-3 group">
           <motion.div
-            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--accent),#0f766e)] text-[var(--accent-contrast)] shadow-[0_14px_28px_rgba(20,184,166,0.28)]"
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.94 }}
-            transition={{ duration: duration.fast }}
+            className="relative flex h-11 w-11 items-center justify-center"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="h-4.5 w-4.5">
-              <path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 1.5L14 6v4.5L8 14 2 10.5V6L8 2.5z" />
-            </svg>
+            {/* Animated gradient background */}
+            <motion.div
+              className="absolute inset-0 rounded-[14px] bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 opacity-90"
+              animate={{
+                rotate: [0, 360],
+              }}
+              transition={{
+                duration: 8,
+                repeat: Infinity,
+                ease: "linear",
+              }}
+            />
+            {/* Glow effect */}
+            <div className="absolute inset-0 rounded-[14px] bg-gradient-to-br from-indigo-400 via-purple-400 to-pink-400 blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-300" />
+            
+            {/* Icon container */}
+            <div className="relative z-10 flex h-full w-full items-center justify-center rounded-[14px] bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600">
+              {/* AI Brain/Neural Network Icon */}
+              <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 text-white drop-shadow-lg">
+                {/* Center node */}
+                <motion.circle
+                  cx="12"
+                  cy="12"
+                  r="2.5"
+                  fill="currentColor"
+                  animate={{
+                    scale: [1, 1.2, 1],
+                    opacity: [1, 0.8, 1],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                />
+                
+                {/* Outer nodes */}
+                <motion.circle cx="6" cy="6" r="1.5" fill="currentColor" opacity="0.9"
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.2 }}
+                />
+                <motion.circle cx="18" cy="6" r="1.5" fill="currentColor" opacity="0.9"
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.4 }}
+                />
+                <motion.circle cx="6" cy="18" r="1.5" fill="currentColor" opacity="0.9"
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.6 }}
+                />
+                <motion.circle cx="18" cy="18" r="1.5" fill="currentColor" opacity="0.9"
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.8 }}
+                />
+                
+                {/* Connecting lines */}
+                <motion.line x1="6" y1="6" x2="12" y2="12" stroke="currentColor" strokeWidth="1.5" opacity="0.6"
+                  animate={{ opacity: [0.4, 0.8, 0.4] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.1 }}
+                />
+                <motion.line x1="18" y1="6" x2="12" y2="12" stroke="currentColor" strokeWidth="1.5" opacity="0.6"
+                  animate={{ opacity: [0.4, 0.8, 0.4] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.3 }}
+                />
+                <motion.line x1="6" y1="18" x2="12" y2="12" stroke="currentColor" strokeWidth="1.5" opacity="0.6"
+                  animate={{ opacity: [0.4, 0.8, 0.4] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+                />
+                <motion.line x1="18" y1="18" x2="12" y2="12" stroke="currentColor" strokeWidth="1.5" opacity="0.6"
+                  animate={{ opacity: [0.4, 0.8, 0.4] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: 0.7 }}
+                />
+              </svg>
+            </div>
           </motion.div>
-          <div>
-            <span className="font-display block text-sm font-semibold tracking-tight text-white">ADW</span>
-            <span className="block text-[11px] uppercase tracking-[0.22em] text-[var(--text-muted)]">Workspace</span>
+          
+          <div className="flex flex-col">
+            <motion.span 
+              className="font-display block text-[15px] font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent"
+              whileHover={{ scale: 1.02 }}
+              transition={{ duration: 0.2 }}
+            >
+              ADW
+            </motion.span>
+            <span className="block text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 group-hover:text-gray-400 transition-colors">
+              AI Workspace
+            </span>
           </div>
         </Link>
       </div>

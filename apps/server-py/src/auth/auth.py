@@ -51,7 +51,8 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Missing authorization token")
 
     try:
-        decoded = firebase_auth.verify_id_token(creds.credentials)
+        # Allow 10 seconds of clock skew tolerance to prevent timing errors
+        decoded = firebase_auth.verify_id_token(creds.credentials, clock_skew_seconds=10)
     except Exception as e:
         logger.error(f"Token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
