@@ -33,7 +33,6 @@ services:
       - ./apps/web/.env.local
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://adw-backend:4000
     depends_on:
       - backend
     restart: unless-stopped
