@@ -26,7 +26,7 @@ pipeline {
                         --name adw-frontend \
                         --network devops-app_default \
                         -p 3000:3000 \
-                        -e NEXT_PUBLIC_API_URL=http://adw-backend:4000 \
+                        -e NEXT_PUBLIC_API_URL=http://localhost:4000 \
                         autonomousdeveloperworkspaceadw-frontend:latest
                 '''
             }
