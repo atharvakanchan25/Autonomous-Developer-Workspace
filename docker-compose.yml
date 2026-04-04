@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: adw-backend
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - PORT=4000
+    restart: unless-stopped
+    networks:
+      - devops-app_default
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:4000
+        - NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCODxaSKLy9ec8diOFHiV5pcfh973tTjZc
+        - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=adw01-129ba.firebaseapp.com
+        - NEXT_PUBLIC_FIREBASE_PROJECT_ID=adw01-129ba
+        - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=adw01-129ba.firebasestorage.app
+        - NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=265184951375
+        - NEXT_PUBLIC_FIREBASE_APP_ID=1:265184951375:web:d7a5748f0789fa90403e3a
+    container_name: adw-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - devops-app_default
+
+networks:
+  devops-app_default:
+    external: true
