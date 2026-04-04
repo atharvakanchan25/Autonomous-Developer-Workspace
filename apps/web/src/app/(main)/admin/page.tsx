@@ -186,7 +186,8 @@ export default function AdminPage() {
       loadData();
       setDataLoaded(true);
     }
-  }, [user, hasRole, dataLoaded]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, dataLoaded]);
 
   async function loadData() {
     setLoadingData(true);
