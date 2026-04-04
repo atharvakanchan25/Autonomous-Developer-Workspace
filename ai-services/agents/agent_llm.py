@@ -57,10 +57,6 @@ async def call_llm(
             tokens_used = response.usage.total_tokens if response.usage else 0
             return LlmResult(content=content, tokensUsed=tokens_used)
         except RateLimitError as err:
-            # Daily token quota exhausted — no point retrying
-            if '"type": "tokens"' in str(err) or "tokens per day" in str(err):
-                logger.error("Groq daily token limit (TPD) exhausted. Upgrade at https://console.groq.com/settings/billing")
-                raise
             if attempt == _MAX_RETRIES:
                 raise
             wait = _parse_retry_after(err)
