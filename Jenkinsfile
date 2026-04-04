@@ -17,14 +17,14 @@ pipeline {
         stage('Build Backend') {
             steps {
                 echo '🐍 Building backend Docker image...'
-                sh 'docker build -t adw-backend ./apps/server-py'
+                sh 'docker build --network=host -t adw-backend ./apps/server-py'
             }
         }
 
         stage('Build Frontend') {
             steps {
                 echo '⚛️ Building frontend Docker image...'
-                sh 'docker build -t adw-frontend ./apps/web'
+                sh 'docker build --network=host -t adw-frontend ./apps/web'
             }
         }
 
