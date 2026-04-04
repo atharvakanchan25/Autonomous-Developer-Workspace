@@ -24,27 +24,6 @@ if not firebase_admin._apps:
 _bearer = HTTPBearer(auto_error=False)
 ROLES = ("user", "admin")
 
-# Source-of-truth admin emails — role is ALWAYS enforced from here,
-# regardless of what is stored in the database.
-DEFAULT_ADMIN_EMAILS: set[str] = {
-    "tanvihole@adw.com",
-    "saloni@adw.com",
-    "varadmandhare@adw.com",
-    "prajwalshedge@adw.com",
-    "aryankanchan@adw.com",
-    "atharvakanchan@adw.com",
-    "atharvakanchan959@gmail.com",
-    "abhidhautre@adw.com",
-}
-
-ENV_ADMIN_EMAILS = {
-    email.strip().lower()
-    for email in config.ADMIN_EMAILS.split(",")
-    if email.strip()
-}
-
-ADMIN_EMAILS = {e.lower() for e in DEFAULT_ADMIN_EMAILS | ENV_ADMIN_EMAILS}
-
 
 class AuthUser:
     def __init__(self, uid: str, email: str, role: str):
@@ -80,34 +59,29 @@ async def get_current_user(
     uid = decoded["uid"]
     email = decoded.get("email", "")
 
-    # Email is the single source of truth for admin role (case-insensitive)
-    correct_role = "admin" if email.lower() in ADMIN_EMAILS else "user"
-    logger.info(f"Auth check: {email} -> role: {correct_role} (in ADMIN_EMAILS: {email.lower() in ADMIN_EMAILS})")
-
+    # Fetch role from database - database is the source of truth
     doc = db.collection("users").document(uid).get()
     if doc.exists:
-        stored_role = doc.to_dict().get("role", "user")
-        if stored_role != correct_role:
-            db.collection("users").document(uid).update({
-                "role": correct_role,
-                "updatedAt": now_iso(),
-            })
-            logger.info(f"Corrected role for {email}: {stored_role} -> {correct_role}")
+        user_data = doc.to_dict()
+        role = user_data.get("role", "user")
+        logger.info(f"Auth check: {email} -> role from DB: {role}")
     else:
         # Clean up any stale email-keyed placeholder docs first
         for ed in db.collection("users").where("email", "==", email).stream():
             ed.reference.delete()
 
+        # Create new user with default "user" role
+        role = "user"
         db.collection("users").document(uid).set({
             "uid": uid,
             "email": email,
-            "role": correct_role,
+            "role": role,
             "createdAt": now_iso(),
             "updatedAt": now_iso(),
         })
-        logger.info(f"Created user {email} with role {correct_role}")
+        logger.info(f"Created user {email} with role {role}")
 
-    return AuthUser(uid=uid, email=email, role=correct_role)
+    return AuthUser(uid=uid, email=email, role=role)
 
 
 def require_role(minimum: str):
