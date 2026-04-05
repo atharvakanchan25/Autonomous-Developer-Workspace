@@ -104,6 +104,86 @@ cd frontend
 npm run dev
 ```
 
+## 🐳 Running on a Linux Server (Docker)
+
+This setup uses Docker + uv so every developer on the shared server gets an identical, isolated environment.
+
+### Prerequisites
+- Docker
+- Docker Compose v2
+
+### 1. Clone the repo
+
+```bash
+git clone <repo-url> Autonomous-Developer-Workspace
+cd Autonomous-Developer-Workspace
+```
+
+### 2. Configure your environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in your credentials. Also set **unique ports** and a **unique project name** so your containers don't clash with teammates on the same server:
+
+```env
+GROQ_API_KEY=your-groq-api-key
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_KEY\n-----END PRIVATE KEY-----\n"
+
+# Pick ports no one else on the server is using
+BACKEND_PORT=4001
+FRONTEND_PORT=3001
+
+# Unique name keeps your containers isolated from other developers
+COMPOSE_PROJECT_NAME=adw-yourname
+```
+
+### 3. Build and start
+
+```bash
+docker compose up --build -d
+```
+
+### 4. Access your instance
+
+| Service | URL |
+|---|---|
+| Frontend | `http://<server-ip>:<FRONTEND_PORT>` |
+| Backend API | `http://<server-ip>:<BACKEND_PORT>` |
+| API Docs | `http://<server-ip>:<BACKEND_PORT>/docs` |
+
+### Daily workflow
+
+```bash
+docker compose up -d            # start containers
+docker compose down             # stop containers
+docker compose logs -f          # tail logs from all services
+docker compose logs -f backend  # tail backend logs only
+docker compose restart backend  # restart after config changes
+```
+
+Code changes are picked up automatically — the project directory is mounted as a volume, uvicorn runs with `--reload`, and Next.js uses HMR. No rebuild needed for code edits.
+
+### Rebuilding after dependency changes
+
+```bash
+docker compose up --build -d
+```
+
+### Multi-developer isolation summary
+
+| Concern | Solution |
+|---|---|
+| Container name conflicts | Each dev sets a unique `COMPOSE_PROJECT_NAME` |
+| Port conflicts | Each dev picks unique `BACKEND_PORT` / `FRONTEND_PORT` |
+| Filesystem isolation | Each dev works in their own Linux user home directory |
+| Secret isolation | `.env` is gitignored — never shared or committed |
+
+---
+
 ## 🌐 Access
 
 - Frontend: http://localhost:3000
