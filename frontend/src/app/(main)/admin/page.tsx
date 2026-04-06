@@ -5,7 +5,18 @@ import { useAuth } from "@/lib/useAuth";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { api } from "@/lib/api";
-import type { Project } from "@/types";
+import { webConfig } from "@/lib/config";
+
+interface AdminProject {
+  id: string;
+  name: string;
+  description?: string | null;
+  ownerId?: string;
+  ownerEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+  taskCount: number;
+}
 
 interface User {
   id: string;
@@ -64,11 +75,17 @@ interface TokenUsage {
   email: string;
   role: string;
   totalTokens: number;
+  agentTokens: number;
+  plannerTokens: number;
   callCount: number;
+  agentCalls: number;
+  plannerCalls: number;
   lastCallAt: string | null;
   limit: number;
   remaining: number;
   limitExceeded: boolean;
+  usagePercent: number;
+  isActive: boolean;
 }
 
 interface TokenCall {
@@ -148,10 +165,11 @@ export default function AdminPage() {
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<AdminProject[]>([]);
   const [tab, setTab] = useState<"overview" | "users" | "admins" | "tokens" | "audit" | "projects" | "system">("overview");
   const [loadingData, setLoadingData] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userTab, setUserTab] = useState<"overview" | "projects" | "activity" | "tokens">("overview");
@@ -165,9 +183,19 @@ export default function AdminPage() {
   const [tokenUser, setTokenUser] = useState<TokenUsage | null>(null);
   const [tokenCalls, setTokenCalls] = useState<TokenCall[]>([]);
   const [tokenCallsLoading, setTokenCallsLoading] = useState(false);
+  const [tokenSearch, setTokenSearch] = useState("");
 
   const [auditFilter, setAuditFilter] = useState<string>("ALL");
   const [auditUserFilter, setAuditUserFilter] = useState<string>("ALL");
+  const [loadedTabs, setLoadedTabs] = useState<Record<string, boolean>>({
+    overview: false,
+    users: false,
+    admins: false,
+    tokens: false,
+    audit: false,
+    projects: false,
+    system: false,
+  });
 
   useEffect(() => {
     if (!loading && !hasRole("admin")) {
@@ -177,13 +205,62 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (user && hasRole("admin") && !dataLoaded) {
-      loadData();
+      loadInitialData();
       setDataLoaded(true);
     }
   }, [user, hasRole, dataLoaded]);
 
+  useEffect(() => {
+    if (!user || !hasRole("admin") || !dataLoaded) return;
+
+    if ((tab === "users" || tab === "admins") && !loadedTabs.users) {
+      void loadUsers().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, users: true, admins: true }));
+      });
+    }
+    if (tab === "tokens" && !loadedTabs.tokens) {
+      void loadTokenUsage().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, tokens: true }));
+      });
+    }
+    if (tab === "audit" && !loadedTabs.audit) {
+      void loadAuditLogs().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, audit: true }));
+      });
+    }
+    if (tab === "projects" && !loadedTabs.projects) {
+      void loadProjects().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, projects: true }));
+      });
+    }
+    if (tab === "system" && !loadedTabs.system) {
+      void loadSystemHealth().then(() => {
+        setLoadedTabs((prev) => ({ ...prev, system: true }));
+      });
+    }
+  }, [user, hasRole, dataLoaded, tab, loadedTabs]);
+
+  async function loadInitialData() {
+    setLoadingData(true);
+    setPanelError(null);
+    await Promise.all([
+      loadStats(),
+      loadSystemHealth(),
+      loadUsers(),
+    ]);
+    setLoadedTabs((prev) => ({
+      ...prev,
+      overview: true,
+      users: true,
+      admins: true,
+      system: true,
+    }));
+    setLoadingData(false);
+  }
+
   async function loadData() {
     setLoadingData(true);
+    setPanelError(null);
     await Promise.all([
       loadStats(),
       loadSystemHealth(),
@@ -192,6 +269,15 @@ export default function AdminPage() {
       loadProjects(),
       loadTokenUsage()
     ]);
+    setLoadedTabs({
+      overview: true,
+      users: true,
+      admins: true,
+      tokens: true,
+      audit: true,
+      projects: true,
+      system: true,
+    });
     setLoadingData(false);
   }
 
@@ -199,7 +285,7 @@ export default function AdminPage() {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/stats`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -207,6 +293,7 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error("Failed to load stats:", error);
+      setPanelError("Some admin dashboard data failed to load.");
     }
   }
 
@@ -214,7 +301,7 @@ export default function AdminPage() {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/system-health`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/system-health`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -222,22 +309,17 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error("Failed to load system health:", error);
+      setPanelError("System health could not be loaded.");
     }
   }
 
   async function loadTokenUsage() {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/token-usage`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const d = await res.json();
-        setTokenUsage(Array.isArray(d) ? d : []);
-      }
-    } catch {
+      const d = await api.admin.tokenUsage();
+      setTokenUsage(Array.isArray(d) ? d as TokenUsage[] : []);
+    } catch (err) {
       setTokenUsage([]);
+      setPanelError(err instanceof Error ? err.message : "Token usage could not be loaded.");
     }
   }
 
@@ -246,14 +328,10 @@ export default function AdminPage() {
     setTokenCalls([]);
     setTokenCallsLoading(true);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/token-usage/${u.uid}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const d = await res.json();
-        setTokenCalls(Array.isArray(d) ? d : []);
-      }
+      const d = await api.admin.tokenUsageDetails(u.uid);
+      setTokenCalls(Array.isArray(d) ? d as TokenCall[] : []);
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "Token call details could not be loaded.");
     } finally {
       setTokenCallsLoading(false);
     }
@@ -261,17 +339,18 @@ export default function AdminPage() {
 
   async function loadUsers() {
     try {
-      const token = await auth.currentUser?.getIdToken(true);
+      const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const d = await res.json();
         setUsers(Array.isArray(d) ? d : []);
       }
-    } catch {
+    } catch (err) {
       setUsers([]);
+      setPanelError(err instanceof Error ? err.message : "Users could not be loaded.");
     }
   }
 
@@ -279,23 +358,24 @@ export default function AdminPage() {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/audit-logs?limit=200`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/audit-logs?limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const d = await res.json();
         setAuditLogs(Array.isArray(d) ? d : []);
       }
-    } catch {
+    } catch (err) {
       setAuditLogs([]);
+      setPanelError(err instanceof Error ? err.message : "Audit logs could not be loaded.");
     }
   }
 
   async function loadProjects() {
     try {
-      setProjects(await api.admin.projects());
-    } catch {
-      // ignore
+      setProjects(await api.admin.projects() as AdminProject[]);
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "Projects could not be loaded.");
     }
   }
 
@@ -308,17 +388,17 @@ export default function AdminPage() {
     setUserLoading(true);
     setUserError(null);
     try {
-      const token = await auth.currentUser?.getIdToken(true);
+      const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("No auth token");
 
       const [actRes, projRes, tokRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${u.uid}/activity`, {
+        fetch(`${webConfig.apiUrl}/api/admin/users/${u.uid}/activity`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${u.uid}/projects`, {
+        fetch(`${webConfig.apiUrl}/api/admin/users/${u.uid}/projects`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/token-usage/${u.uid}`, {
+        fetch(`${webConfig.apiUrl}/api/admin/token-usage/${u.uid}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -336,7 +416,7 @@ export default function AdminPage() {
   async function changeRole(uid: string, role: string) {
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${uid}/role`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users/${uid}/role`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ role }),
@@ -346,15 +426,15 @@ export default function AdminPage() {
         await loadAuditLogs();
         await loadStats();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "Role update failed.");
     }
   }
 
   async function suspendUser(uid: string, suspended: boolean) {
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${uid}/suspend`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users/${uid}/suspend`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ suspended }),
@@ -363,8 +443,8 @@ export default function AdminPage() {
         await loadUsers();
         await loadAuditLogs();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "Suspension update failed.");
     }
   }
 
@@ -372,7 +452,7 @@ export default function AdminPage() {
     if (!confirm("Delete this user?")) return;
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${uid}`, {
+      const res = await fetch(`${webConfig.apiUrl}/api/admin/users/${uid}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -381,20 +461,20 @@ export default function AdminPage() {
         await loadAuditLogs();
         await loadStats();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "User deletion failed.");
     }
   }
 
   async function deleteProject(id: string, name: string) {
     if (!confirm(`Delete project "${name}" and all its tasks?`)) return;
     try {
-      await api.projects.delete(id);
+      await api.admin.deleteProject(id);
       await loadProjects();
       await loadAuditLogs();
       await loadStats();
-    } catch {
-      // ignore
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "Project deletion failed.");
     }
   }
 
@@ -413,6 +493,14 @@ export default function AdminPage() {
 
   const regularUsers = users.filter((u) => u.role !== "admin");
   const admins = users.filter((u) => u.role === "admin");
+  const filteredTokenUsage = tokenUsage
+    .filter((u) => u.email.toLowerCase().includes(tokenSearch.toLowerCase()) || u.role.toLowerCase().includes(tokenSearch.toLowerCase()))
+    .sort((a, b) => b.totalTokens - a.totalTokens);
+  const totalTokenVolume = tokenUsage.reduce((sum, u) => sum + u.totalTokens, 0);
+  const totalAgentTokens = tokenUsage.reduce((sum, u) => sum + u.agentTokens, 0);
+  const totalPlannerTokens = tokenUsage.reduce((sum, u) => sum + u.plannerTokens, 0);
+  const activeTokenUsers = tokenUsage.filter((u) => u.isActive).length;
+  const topTokenUser = [...tokenUsage].sort((a, b) => b.totalTokens - a.totalTokens)[0] ?? null;
 
   if (loading || !user || !hasRole("admin")) {
     return (
@@ -487,6 +575,11 @@ export default function AdminPage() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6">
+        {panelError && (
+          <div className="mb-6 rounded-xl border border-red-900 bg-red-950/60 px-4 py-3 text-sm text-red-300">
+            {panelError}
+          </div>
+        )}
         {loadingData ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
@@ -770,41 +863,114 @@ export default function AdminPage() {
         ) : tab === "tokens" ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-100">Token Usage Analytics</h2>
-              <span className="text-sm text-gray-500">{tokenUsage.length} users with token usage</span>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-100">Token Usage Analytics</h2>
+                <p className="mt-1 text-sm text-gray-500">Every user is listed here, including accounts with zero usage.</p>
+              </div>
+              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-sm text-cyan-300">
+                {tokenUsage.length} total users
+              </span>
             </div>
 
-            <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] overflow-hidden">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_55%),#131a2a] p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/80">Total Volume</p>
+                <p className="mt-3 text-3xl font-semibold text-white">{formatNumber(totalTokenVolume)}</p>
+                <p className="mt-2 text-sm text-gray-400">All planner and agent consumption combined.</p>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-indigo-500/20 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.2),transparent_55%),#131a2a] p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-indigo-300/80">Active Users</p>
+                <p className="mt-3 text-3xl font-semibold text-white">{activeTokenUsers}</p>
+                <p className="mt-2 text-sm text-gray-400">Users who have made at least one planner or agent call.</p>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-fuchsia-500/20 bg-[radial-gradient(circle_at_top_left,rgba(217,70,239,0.18),transparent_55%),#131a2a] p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-fuchsia-300/80">Planner vs Agent</p>
+                <p className="mt-3 text-3xl font-semibold text-white">
+                  {totalTokenVolume > 0 ? Math.round((totalPlannerTokens / totalTokenVolume) * 100) : 0}%
+                </p>
+                <p className="mt-2 text-sm text-gray-400">
+                  Planner {formatNumber(totalPlannerTokens)} · Agent {formatNumber(totalAgentTokens)}
+                </p>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-amber-500/20 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_55%),#131a2a] p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-amber-300/80">Top Consumer</p>
+                <p className="mt-3 truncate text-lg font-semibold text-white">{topTokenUser?.email ?? "No usage yet"}</p>
+                <p className="mt-2 text-sm text-gray-400">
+                  {topTokenUser ? `${formatNumber(topTokenUser.totalTokens)} tokens across ${topTokenUser.callCount} calls` : "Waiting for first activity"}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-[#141b29] p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-200">Usage Directory</p>
+                  <p className="text-xs text-gray-500">Search by email or role and inspect per-user breakdowns.</p>
+                </div>
+                <div className="relative w-full max-w-sm">
+                  <input
+                    value={tokenSearch}
+                    onChange={(e) => setTokenSearch(e.target.value)}
+                    placeholder="Search users or roles..."
+                    className="w-full rounded-xl border border-white/10 bg-[#0f1419] px-4 py-2.5 text-sm text-gray-100 placeholder:text-gray-500 focus:border-cyan-500/50 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-gray-700 bg-[#1a1f2e] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-700">
-                  <thead className="bg-[#22283a]">
+                  <thead className="bg-[linear-gradient(90deg,#1d2538,#22283a)]">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">User</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Total Tokens</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">API Calls</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Usage Mix</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Calls</th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Last Activity</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Health</th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800">
-                    {tokenUsage
-                      .sort((a, b) => b.totalTokens - a.totalTokens)
-                      .map((u) => (
-                        <tr key={u.uid} className="hover:bg-[#202638]">
+                    {filteredTokenUsage.map((u) => (
+                        <tr key={u.uid} className="transition-colors hover:bg-[#202638]">
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
                               <span className="text-sm font-medium text-gray-100">{u.email}</span>
-                              <span className="text-xs text-gray-500">{u.role}</span>
+                              <div className="mt-1 flex items-center gap-2">
+                                <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-400">{u.role}</span>
+                                {!u.isActive && (
+                                  <span className="inline-flex rounded-full border border-gray-700 bg-gray-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500">No activity</span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-medium text-gray-100">{formatNumber(u.totalTokens)}</span>
-                              <span className="text-xs text-gray-500">of {formatNumber(u.limit)}</span>
+                            <div className="flex min-w-[220px] flex-col gap-2">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="font-medium text-gray-100">{formatNumber(u.totalTokens)}</span>
+                                <span className="text-xs text-gray-500">{u.usagePercent.toFixed(1)}% of {formatNumber(u.limit)}</span>
+                              </div>
+                              <div className="h-2 overflow-hidden rounded-full bg-gray-800">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    u.limitExceeded ? "bg-red-500" : u.usagePercent > 70 ? "bg-amber-400" : "bg-cyan-400"
+                                  }`}
+                                  style={{ width: `${Math.min(u.usagePercent, 100)}%` }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                                <span>Planner {formatNumber(u.plannerTokens)}</span>
+                                <span>Agent {formatNumber(u.agentTokens)}</span>
+                              </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-300">{u.callCount}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col text-sm text-gray-300">
+                              <span>{u.callCount} total</span>
+                              <span className="text-xs text-gray-500">{u.plannerCalls} planner · {u.agentCalls} agent</span>
+                            </div>
+                          </td>
                           <td className="px-6 py-4 text-sm text-gray-300">
                             {u.lastCallAt ? timeAgo(u.lastCallAt) : "Never"}
                           </td>
@@ -812,23 +978,32 @@ export default function AdminPage() {
                             <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${
                               u.limitExceeded
                                 ? "border-red-700 bg-red-900/30 text-red-400"
+                                : !u.isActive
+                                ? "border-gray-700 bg-gray-800 text-gray-400"
                                 : u.remaining < u.limit * 0.1
                                 ? "border-yellow-700 bg-yellow-900/30 text-yellow-400"
                                 : "border-green-700 bg-green-900/30 text-green-400"
                             }`}>
-                              {u.limitExceeded ? "Over Limit" : u.remaining < u.limit * 0.1 ? "Low" : "Good"}
+                              {u.limitExceeded ? "Over Limit" : !u.isActive ? "Idle" : u.remaining < u.limit * 0.1 ? "Low" : "Healthy"}
                             </span>
                           </td>
                           <td className="px-6 py-4">
                             <button
                               onClick={() => openTokenCalls(u)}
-                              className="text-xs px-3 py-1 bg-indigo-900/30 text-indigo-400 rounded border border-indigo-800 hover:bg-indigo-900/50"
+                              className="rounded-lg border border-cyan-700/60 bg-cyan-900/20 px-3 py-1.5 text-xs font-medium text-cyan-300 transition-colors hover:bg-cyan-900/35"
                             >
                               View Calls
                             </button>
                           </td>
                         </tr>
                       ))}
+                    {filteredTokenUsage.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">
+                          No users match your token search.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -837,17 +1012,22 @@ export default function AdminPage() {
             {/* Token Calls Modal */}
             {tokenUser && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-[#1a1f2e] rounded-lg border border-gray-700 max-w-4xl w-full max-h-[80vh] overflow-hidden">
-                  <div className="p-6 border-b border-gray-700">
+                <div className="max-h-[80vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-gray-700 bg-[#1a1f2e] shadow-[0_40px_100px_rgba(0,0,0,0.45)]">
+                  <div className="border-b border-gray-700 bg-[linear-gradient(90deg,#171d2d,#1a1f2e)] p-6">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-100">
-                        Token Usage Details - {tokenUser.email}
-                      </h3>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-100">
+                          Token Usage Details - {tokenUser.email}
+                        </h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {formatNumber(tokenUser.totalTokens)} total tokens · {tokenUser.callCount} calls
+                        </p>
+                      </div>
                       <button
                         onClick={() => setTokenUser(null)}
                         className="text-gray-400 hover:text-gray-200"
                       >
-                        
+                        ×
                       </button>
                     </div>
                   </div>
@@ -862,13 +1042,13 @@ export default function AdminPage() {
                     ) : (
                       <div className="space-y-3">
                         {tokenCalls.map((call) => (
-                          <div key={call.id} className="p-4 rounded-lg bg-[#22283a] border border-gray-700">
+                          <div key={call.id} className="rounded-xl border border-gray-700 bg-[#22283a] p-4">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
                                 <span className={`text-sm font-medium ${
                                   call.source === "agent" ? "text-indigo-400" : "text-purple-400"
                                 }`}>
-                                  {call.source === "agent" ? "" : ""} {call.agentType}
+                                  {call.source === "agent" ? "Agent" : "Planner"} · {call.agentType}
                                 </span>
                                 <span className={`text-xs px-2 py-1 rounded ${
                                   call.status === "COMPLETED" ? "bg-green-900/30 text-green-400" :
@@ -880,7 +1060,7 @@ export default function AdminPage() {
                               </div>
                               <span className="text-sm text-gray-400">{timeAgo(call.createdAt)}</span>
                             </div>
-                            <p className="text-sm text-gray-300 mb-2">{call.prompt.slice(0, 100)}...</p>
+                            <p className="mb-2 text-sm text-gray-300">{call.prompt.slice(0, 140)}...</p>
                             <div className="flex justify-between text-xs text-gray-500">
                               <span>{call.tokensUsed} tokens used</span>
                               <span>{call.createdAt}</span>
@@ -989,7 +1169,7 @@ export default function AdminPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-300">
-                            {users.find(u => u.uid === p.ownerId)?.email || p.ownerId.slice(0, 12) + ""}
+                            {p.ownerEmail || users.find(u => u.uid === p.ownerId)?.email || (p.ownerId ? p.ownerId.slice(0, 12) : "Unknown")}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-300">{p.taskCount || 0}</td>
                           <td className="px-6 py-4 text-sm text-gray-300">{formatDate(p.createdAt)}</td>
@@ -1094,7 +1274,7 @@ export default function AdminPage() {
                     onClick={() => setSelectedUser(null)}
                     className="text-gray-400 hover:text-gray-200 text-xl"
                   >
-                    
+                    ×
                   </button>
                 </div>
               </div>

@@ -44,6 +44,7 @@ class CodeGeneratorAgent:
         extension = LANGUAGE_EXTENSIONS.get(language, ".txt")
         src_dir = LANGUAGE_DIRS.get(language, "src")
         framework_hint = f" using {framework}" if framework else ""
+        mcp_context = f"\n\nWorkspace context from MCP:\n{ctx.mcpContext}" if ctx.mcpContext else ""
 
         result = await call_llm([
             LlmMessage(role="system", content=(
@@ -61,6 +62,7 @@ class CodeGeneratorAgent:
             LlmMessage(role="user", content=(
                 f"Task: {ctx.taskTitle}\n"
                 f"Description: {ctx.taskDescription}"
+                f"{mcp_context}"
             )),
         ], max_tokens=8192, json_mode=True)
 

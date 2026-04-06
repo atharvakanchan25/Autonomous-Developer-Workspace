@@ -26,14 +26,14 @@ async def get_observability_summary(
     task_list = [t.to_dict() for t in tasks]
     
     status_counts = {
-        "pending": 0,
-        "in_progress": 0,
-        "completed": 0,
-        "failed": 0
+        "PENDING": 0,
+        "IN_PROGRESS": 0,
+        "COMPLETED": 0,
+        "FAILED": 0
     }
     
     for task in task_list:
-        status = task.get("status", "pending")
+        status = task.get("status", "PENDING")
         if status in status_counts:
             status_counts[status] += 1
     

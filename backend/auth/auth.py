@@ -30,7 +30,7 @@ class AuthUser:
         return self.role == "admin"
 
     def can_access_resource(self, resource_owner_id: str) -> bool:
-        return self.is_admin() or self.uid == resource_owner_id
+        return self.uid == resource_owner_id
 
 
 async def get_current_user(

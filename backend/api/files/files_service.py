@@ -9,6 +9,18 @@ from backend.core.logger import logger
 
 router = APIRouter()
 
+
+def serialize_file(file_id: str, data: dict, include_content: bool = True) -> dict:
+    content = data.get("content", "") or ""
+    path = data.get("path", "")
+    return {
+        "id": file_id,
+        **data,
+        "name": data.get("name") or path.split("/")[-1],
+        "size": int(data.get("size") or len(content.encode("utf-8"))),
+        "content": content if include_content else "",
+    }
+
 class CreateFileRequest(BaseModel):
     projectId: str
     path: str
@@ -33,7 +45,7 @@ async def list_files(
         raise not_found("Project")
     
     docs = db.collection("files").where("projectId", "==", projectId).order_by("path").stream()
-    return [{"id": d.id, **d.to_dict()} for d in docs]
+    return [serialize_file(d.id, d.to_dict(), include_content=False) for d in docs]
 
 @router.post("/")
 async def create_file(body: CreateFileRequest, user: AuthUser = Depends(get_current_user)):
@@ -58,7 +70,9 @@ async def create_file(body: CreateFileRequest, user: AuthUser = Depends(get_curr
         "projectId": body.projectId,
         "path": body.path.strip(),
         "content": body.content,
+        "name": body.path.strip().split("/")[-1],
         "language": body.language or "text",
+        "size": len((body.content or "").encode("utf-8")),
         "createdBy": user.email,
         "createdAt": now_iso(),
         "updatedAt": now_iso(),
@@ -66,7 +80,7 @@ async def create_file(body: CreateFileRequest, user: AuthUser = Depends(get_curr
     
     _, ref = db.collection("files").add(file_data)
     logger.info(f"File created: {body.path} in project {body.projectId}")
-    return {"id": ref.id, **file_data}
+    return serialize_file(ref.id, file_data)
 
 @router.get("/{file_id}")
 async def get_file(file_id: str, user: AuthUser = Depends(get_current_user)):
@@ -84,7 +98,7 @@ async def get_file(file_id: str, user: AuthUser = Depends(get_current_user)):
         if not user.can_access_resource(project.get("ownerId")):
             raise not_found("File")
     
-    return {"id": doc.id, **file_data}
+    return serialize_file(doc.id, file_data)
 
 @router.patch("/{file_id}")
 async def update_file(file_id: str, body: UpdateFileRequest, user: AuthUser = Depends(get_current_user)):
@@ -104,12 +118,13 @@ async def update_file(file_id: str, body: UpdateFileRequest, user: AuthUser = De
     
     db.collection("files").document(file_id).update({
         "content": body.content,
+        "size": len((body.content or "").encode("utf-8")),
         "updatedAt": now_iso(),
     })
     
     logger.info(f"File updated: {file_id}")
     updated_doc = db.collection("files").document(file_id).get()
-    return {"id": updated_doc.id, **updated_doc.to_dict()}
+    return serialize_file(updated_doc.id, updated_doc.to_dict())
 
 @router.delete("/{file_id}")
 async def delete_file(file_id: str, user: AuthUser = Depends(get_current_user)):

@@ -164,6 +164,9 @@ export const api = {
       }),
   },
   admin: {
-    projects: () => request<Array<Project & { ownerEmail: string }>>("/api/admin/projects"),
+    projects: () => request<Project[]>("/api/admin/projects"),
+    deleteProject: (id: string) => request<void>(`/api/admin/projects/${id}`, { method: "DELETE" }),
+    tokenUsage: () => request<any[]>("/api/admin/token-usage"),
+    tokenUsageDetails: (uid: string) => request<any[]>(`/api/admin/token-usage/${uid}`),
   },
 };

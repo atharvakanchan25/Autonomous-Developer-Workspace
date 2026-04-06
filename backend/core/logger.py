@@ -10,7 +10,7 @@ _LEVEL_MAP = {
     "error": logging.ERROR,
 }
 
-_log_dir = Path(__file__).resolve().parents[3] / "logs"
+_log_dir = Path(__file__).resolve().parents[2] / "logs"
 _log_dir.mkdir(exist_ok=True)
 
 _fmt = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"

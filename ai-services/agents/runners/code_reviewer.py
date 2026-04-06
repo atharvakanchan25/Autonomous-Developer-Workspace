@@ -28,6 +28,7 @@ class CodeReviewerAgent:
 
         code_section = f"\n\n```{language}\n{code_artifact.content}\n```" if code_artifact else ""
         test_section = f"\n\nTests:\n```{language}\n{test_artifact.content}\n```" if test_artifact else ""
+        mcp_context = f"\n\nWorkspace context from MCP:\n{ctx.mcpContext}" if ctx.mcpContext else ""
 
         result = await call_llm(
             messages=[
@@ -44,7 +45,7 @@ class CodeReviewerAgent:
                 LlmMessage(role="user", content=(
                     f"Task: {ctx.taskTitle}\n"
                     f"Description: {ctx.taskDescription}"
-                    f"{code_section}{test_section}"
+                    f"{code_section}{test_section}{mcp_context}"
                 )),
             ],
             max_tokens=512,

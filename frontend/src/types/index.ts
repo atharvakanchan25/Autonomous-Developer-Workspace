@@ -5,10 +5,12 @@ export interface Project {
   name: string;
   description?: string | null;
   ownerId?: string;
+  ownerEmail?: string;
   language?: string;
   framework?: string;
   createdAt: string;
   updatedAt: string;
+  taskCount?: number;
   _count?: { tasks: number };
 }
 

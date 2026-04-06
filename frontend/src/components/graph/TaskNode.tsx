@@ -63,28 +63,11 @@ function TaskNodeInner({ data, selected }: NodeProps) {
   const isRunning = task.status === "IN_PROGRESS";
   const isCompleted = task.status === "COMPLETED";
   const isFailed = task.status === "FAILED";
-  const [isTriggering, setIsTriggering] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
 
   const handleClick = useCallback(() => {
     onNodeClick?.(task);
   }, [task, onNodeClick]);
-
-  const handleRun = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (task.status !== "PENDING") return;
-      setIsTriggering(true);
-      try {
-        await api.agents.run({ taskId: task.id, pipeline: true });
-      } catch (err) {
-        console.error("Failed to trigger task:", err);
-      } finally {
-        setIsTriggering(false);
-      }
-    },
-    [task.id, task.status],
-  );
 
   const handleRetry = useCallback(
     async (e: React.MouseEvent) => {
@@ -242,32 +225,17 @@ function TaskNodeInner({ data, selected }: NodeProps) {
             </p>
           )}
 
-          {/* Action Button */}
+          {/* Automatic execution state */}
           {task.status === "PENDING" && (
-            <motion.button
-              onClick={handleRun}
-              disabled={isTriggering}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              whileHover={{ scale: 1.02, boxShadow: "0 0 20px rgba(99, 102, 241, 0.5)" }}
-              whileTap={{ scale: 0.98 }}
+            <motion.div
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-500/40 bg-indigo-500/10 px-4 py-2.5 text-sm font-bold text-indigo-200"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              {isTriggering ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
-                    <path d="M4 3v10l8-5-8-5z" />
-                  </svg>
-                  Run Pipeline
-                </>
-              )}
-            </motion.button>
+              <span className="h-4 w-4 animate-pulse rounded-full bg-indigo-400/80" />
+              Queued Automatically
+            </motion.div>
           )}
 
           {isCompleted && (
@@ -294,7 +262,15 @@ function TaskNodeInner({ data, selected }: NodeProps) {
                 <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
                   <path d="M8 0a8 8 0 100 16A8 8 0 008 0zM7 4a1 1 0 112 0v4a1 1 0 11-2 0V4zm1 8a1 1 0 100-2 1 1 0 000 2z" />
                 </svg>
-                Pipeline Failed
+                Auto-Retry Exhausted
+              </motion.div>
+              <motion.div
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-200"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+              >
+                Waiting for System Attention
               </motion.div>
               <motion.button
                 onClick={handleRetry}
@@ -302,9 +278,9 @@ function TaskNodeInner({ data, selected }: NodeProps) {
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-amber-500 disabled:opacity-60 transition-colors"
                 whileHover={{ scale: 1.02, boxShadow: "0 0 20px rgba(217, 119, 6, 0.5)" }}
                 whileTap={{ scale: 0.98 }}
-                initial={{ opacity: 0, y: 6 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
+                transition={{ delay: 0.2 }}
               >
                 {isRetrying ? (
                   <>

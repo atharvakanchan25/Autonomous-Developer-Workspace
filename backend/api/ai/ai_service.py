@@ -1,41 +1,47 @@
-from fastapi import APIRouter, Depends, Query
+import asyncio
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Optional
 from backend.core.database import db
 from backend.core.errors import not_found
 from backend.auth.auth import AuthUser, get_current_user
+from backend.api.ai.langgraph_planner import generate_plan_with_langgraph
+from agents.project_orchestrator import auto_run_project_pipeline
 
 router = APIRouter()
 
 class GeneratePlanRequest(BaseModel):
-    taskId: str
-    prompt: str
+    projectId: str
+    description: str = ""
+    prompt: str = ""
 
-@router.post("/plan")
+@router.post("/generate-plan")
 async def generate_plan(body: GeneratePlanRequest, user: AuthUser = Depends(get_current_user)):
-    """Generate an AI execution plan for a task."""
-    # Verify task exists and user has access
-    task_doc = db.collection("tasks").document(body.taskId).get()
-    if not task_doc.exists:
-        raise not_found("Task")
+    """Generate an AI execution plan for a project and create tasks."""
+    project_id = body.projectId
+    prompt = (body.description or body.prompt or "").strip()
+
+    if not project_id:
+        return {"error": "projectId is required"}
     
-    task = task_doc.to_dict()
-    if not user.can_access_resource(task.get("ownerId")):
-        raise not_found("Task")
+    # Verify project exists and user has access
+    project_doc = db.collection("projects").document(project_id).get()
+    if not project_doc.exists:
+        raise not_found("Project")
     
-    # Simple plan generation (can be enhanced with actual LLM)
-    plan = {
-        "taskId": body.taskId,
-        "prompt": body.prompt,
-        "steps": [
-            {"agent": "scaffold", "description": "Generate project structure"},
-            {"agent": "code_generator", "description": "Generate code implementation"},
-            {"agent": "test_generator", "description": "Generate unit tests"},
-            {"agent": "code_reviewer", "description": "Review code quality"},
-        ],
-        "estimatedDuration": "5-10 minutes"
-    }
-    
+    project = project_doc.to_dict()
+    if not user.can_access_resource(project.get("ownerId")):
+        raise not_found("Project")
+
+    plan = await generate_plan_with_langgraph(
+        project_id=project_id,
+        prompt=prompt,
+        user_id=user.uid,
+        user_email=user.email,
+    )
+    asyncio.create_task(auto_run_project_pipeline(project_id))
+    plan.setdefault("meta", {})
+    plan["meta"]["autoRun"] = True
+    plan["meta"]["retryPolicy"] = {"maxRetries": 2}
     return plan
 
 @router.get("/status")

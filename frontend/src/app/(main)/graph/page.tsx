@@ -46,7 +46,12 @@ export default function GraphPage() {
 
   useEffect(() => {
     if (urlId && urlId !== storedId) setProjectId(urlId);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlId, storedId, setProjectId]);
+
+  useEffect(() => {
+    const nextId = urlId || storedId || "";
+    setSelectedId((prev) => (prev === nextId ? prev : nextId));
+  }, [urlId, storedId]);
 
   const { nodes, edges, tasks, loading, error, lastUpdated, socketStatus, refresh, updateTaskStatus } =
     useTaskGraph(selectedId || null);

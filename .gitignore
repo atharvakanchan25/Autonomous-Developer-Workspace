@@ -17,6 +17,7 @@ venv/
 # Node
 node_modules/
 .next/
+*.tsbuildinfo
 
 # OS
 .DS_Store
@@ -27,3 +28,4 @@ Thumbs.db
 *.db-shm
 *.db-wal
 apps/logs/
+logs/

@@ -186,7 +186,7 @@ export default function EditorPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
 
-  const { tree, loading, refresh, addFile, updateFile, removeFile } =
+  const { files, tree, loading, refresh, addFile, updateFile, removeFile } =
     useFileTree(selectedProjectId || null);
 
   // Auto-show preview if project has frontend files
@@ -203,6 +203,42 @@ export default function EditorPage() {
       }
     }
   }, [tree, showPreview]);
+
+  useEffect(() => {
+    if (!showPreview) return;
+
+    const filesMissingContent = tree.filter(
+      (file) =>
+        file.type === "file" &&
+        file.file &&
+        !file.file.content &&
+        (file.path.endsWith(".html") ||
+          file.path.endsWith(".htm") ||
+          file.path.endsWith(".css") ||
+          file.path.endsWith(".js"))
+    );
+
+    if (filesMissingContent.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      await Promise.all(
+        filesMissingContent.map(async (node) => {
+          try {
+            const full = await api.files.get(node.file!.id);
+            if (!cancelled) updateFile(full);
+          } catch {
+            return null;
+          }
+        }),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showPreview, tree, updateFile]);
 
   function handleProjectChange(id: string) {
     setSelectedProjectId(id);
@@ -283,7 +319,7 @@ export default function EditorPage() {
   }, [selectedProjectId]);
 
   const handleSelect = useCallback(async (file: ProjectFile) => {
-    if (file.content !== undefined && file.content !== null) {
+    if (file.content) {
       setActiveFile(file);
       return;
     }
@@ -376,7 +412,7 @@ export default function EditorPage() {
                 <div className="w-1/2 border-l border-white/10">
                   <iframe
                     key={previewKey}
-                    srcDoc={generatePreviewHTML(tree)}
+                    srcDoc={generatePreviewHTML(files)}
                     className="h-full w-full bg-white"
                     sandbox="allow-scripts"
                     title="Live Preview"
