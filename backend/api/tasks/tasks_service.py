@@ -8,6 +8,7 @@ from backend.auth.auth import AuthUser, get_current_user
 from backend.core.logger import logger
 from backend.realtime.emitter import emit_task_updated
 from backend.realtime.events import TaskUpdatedPayload
+from backend.task_queue.queue import task_queue
 
 router = APIRouter()
 
@@ -123,7 +124,10 @@ async def create_task(body: CreateTaskRequest, user: AuthUser = Depends(get_curr
     
     _, ref = db.collection("tasks").add(task_data)
     logger.info(f"Task created: {ref.id} by {user.email}")
-    
+
+    # Enqueue immediately — no dependencies, ready to run
+    task_queue.enqueue(ref.id)
+
     result = serialize_task(ref.id, task_data)
     await emit_task_updated(TaskUpdatedPayload(
         taskId=ref.id,

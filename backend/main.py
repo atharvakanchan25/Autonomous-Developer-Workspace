@@ -32,7 +32,7 @@ from backend.api.admin.admin_service import router as admin_router
 from backend.api.dev.dev_service import router as dev_router
 from backend.lib.mcp_server import mcp
 
-import backend.task_queue.worker  # noqa: F401
+import backend.task_queue.worker  # noqa: F401  — ensures sys.path is patched before agent imports
 
 
 @asynccontextmanager
@@ -65,7 +65,11 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[config.CORS_ORIGIN],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        config.CORS_ORIGIN,
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

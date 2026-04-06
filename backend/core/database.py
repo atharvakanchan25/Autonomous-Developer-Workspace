@@ -7,7 +7,12 @@ from firebase_admin import credentials, firestore
 
 # Initialize Firebase Admin SDK if not already initialized
 if not firebase_admin._apps:
-    from backend.core.config import config
+    try:
+        from core.config import config
+    except ModuleNotFoundError:
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
+        from core.config import config
     cred = credentials.Certificate({
         "type": "service_account",
         "project_id": config.FIREBASE_PROJECT_ID,

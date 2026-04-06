@@ -85,6 +85,7 @@ async def _plan_steps(state: PlannerState) -> PlannerState:
         )
         parsed = json.loads(result.content)
         steps = _normalize_steps(parsed.get("steps", []))
+        steps.append({"agent": "code_generator", "title": "Frontend UI", "language": "html"})
         plan_tokens = result.tokensUsed
         plan_status = "COMPLETED"
     except Exception as err:
@@ -115,6 +116,7 @@ async def _persist_tasks(state: PlannerState) -> PlannerState:
             "priority": "medium",
             "order": index,
             "dependsOn": depends_on,
+            "language": step.get("language", "python"),
             "agent": step["agent"],
             "autoRun": True,
             "retryCount": 0,
