@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        COMPOSE_PROJECT_NAME = 'adw'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -10,30 +14,25 @@ pipeline {
             }
         }
 
+        stage('Build') {
+            steps {
+                echo 'Building Docker images...'
+                sh 'docker compose build --no-cache'
+            }
+        }
+
         stage('Deploy') {
             steps {
-                echo 'Deploying ADW containers...'
-                sh '''
-                    docker rm -f adw-backend adw-frontend || true
-                    docker run -d \
-                        --name adw-backend \
-                        --network devops-app_default \
-                        -p 4000:4000 \
-                        adw-backend:latest
-                    docker run -d \
-                        --name adw-frontend \
-                        --network devops-app_default \
-                        -p 3000:3000 \
-                        adw-frontend:latest
-                '''
+                echo 'Deploying ADW via Docker Compose...'
+                sh 'docker compose up -d --force-recreate'
             }
         }
 
         stage('Health Check') {
             steps {
                 echo 'Checking backend health...'
-                sleep(time: 8, unit: 'SECONDS')
-                sh 'docker exec adw-backend python -c "import urllib.request; urllib.request.urlopen(\'http://localhost:4000/health\')" || echo "Health check skipped"'
+                sleep(time: 10, unit: 'SECONDS')
+                sh 'curl -sf http://localhost:4000/health || echo "Health check skipped"'
             }
         }
     }
@@ -46,7 +45,7 @@ pipeline {
         }
         failure {
             echo 'Deployment failed!'
-            sh 'docker logs adw-backend --tail=20 || true'
+            sh 'docker compose logs --tail=30 || true'
         }
     }
 }
