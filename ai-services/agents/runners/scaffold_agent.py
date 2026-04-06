@@ -143,7 +143,6 @@ class ScaffoldAgent:
                 elif artifact.type == "test":
                     test_files.append(artifact.filename)
 
-<<<<<<< HEAD:apps/server-py/src/agents/runners/scaffold_agent.py
         all_files = sorted(set(code_files + test_files + [deps_filename, "README.md"]))
         file_tree = _build_file_tree(all_files)
         reviews = _parse_reviews(review_artifacts)
@@ -211,7 +210,6 @@ class ScaffoldAgent:
             LlmMessage(role="user", content=(
                 f"Project: {ctx.projectName}\n"
                 f"Description: {ctx.projectDescription}\n"
-<<<<<<< HEAD:apps/server-py/src/agents/runners/scaffold_agent.py
                 f"Language: {language}{framework_hint}\n"
                 f"Overall Score: {avg_score:.1f}/10 (Grade: {overall_grade})\n\n"
                 f"FILE_TREE:\n{file_tree}\n\n"
@@ -234,7 +232,6 @@ class ScaffoldAgent:
             LlmMessage(role="user", content=(
                 f"Project: {ctx.projectName}\n"
                 f"Language: {language}{framework_hint}\n"
-<<<<<<< HEAD:apps/server-py/src/agents/runners/scaffold_agent.py
                 f"Files: {', '.join(code_files)}"
                 f"{mcp_context}"
             )),
