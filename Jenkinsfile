@@ -24,7 +24,10 @@ pipeline {
         stage('Deploy') {
             steps {
                 echo 'Deploying ADW via Docker Compose...'
-                sh 'docker compose up -d --force-recreate'
+                sh '''
+                    docker rm -f adw-backend adw-frontend || true
+                    docker compose up -d --force-recreate
+                '''
             }
         }
 
