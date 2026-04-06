@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Install dependencies via uv (cached layer)
+COPY pyproject.toml .
+RUN uv sync --no-dev
+
+# Copy source
+COPY . .
+
+EXPOSE 4000
+
+CMD ["uv", "run", "python", "server.py"]
