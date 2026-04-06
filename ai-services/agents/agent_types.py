@@ -3,10 +3,11 @@ from dataclasses import dataclass, field
 
 
 class AgentType(str, Enum):
-    CODE_GENERATOR = "CODE_GENERATOR"
-    TEST_GENERATOR = "TEST_GENERATOR"
-    CODE_REVIEWER  = "CODE_REVIEWER"
-    SCAFFOLD       = "SCAFFOLD"
+    CODE_GENERATOR     = "CODE_GENERATOR"
+    TEST_GENERATOR     = "TEST_GENERATOR"
+    CODE_REVIEWER      = "CODE_REVIEWER"
+    SCAFFOLD           = "SCAFFOLD"
+    FRONTEND_GENERATOR = "FRONTEND_GENERATOR"
 
 
 class AgentRunStatus(str, Enum):
@@ -51,3 +52,6 @@ class AgentContext:
     taskDescription: str
     mcpContext: str = ""
     previousOutputs: dict[AgentType, AgentResult] = field(default_factory=dict)
+    style_theme: str = "Dark"
+    style_font: str = "Modern"
+    style_layout: str = "Minimal"

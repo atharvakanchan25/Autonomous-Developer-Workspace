@@ -77,9 +77,9 @@ export default function DeployPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedPlatform, setExpandedPlatform] = useState<string | null>(null);
   const [showVercelModal, setShowVercelModal] = useState(false);
-  const [vercelToken, setVercelToken] = useState("");
   const [vercelProjectName, setVercelProjectName] = useState("");
   const [deployingToVercel, setDeployingToVercel] = useState(false);
+  const [vercelLiveUrl, setVercelLiveUrl] = useState<string | null>(null);
   const [vercelAuthMethod, setVercelAuthMethod] = useState<"oauth" | "token" | null>(null);
 
   const loadDeployments = useCallback(async (pid: string) => {
@@ -429,14 +429,38 @@ export default function DeployPage() {
                   Cancel
                 </button>
               </>
+            ) : vercelLiveUrl ? (
+              // Success state
+              <>
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20">
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-7 w-7 text-emerald-400">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-100">Deployed!</h3>
+                  <p className="text-sm text-gray-400 text-center">Your frontend is live on Vercel</p>
+                  <a
+                    href={vercelLiveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-center text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors break-all"
+                  >
+                    {vercelLiveUrl}
+                  </a>
+                </div>
+                <button
+                  onClick={() => { setShowVercelModal(false); setVercelAuthMethod(null); setVercelLiveUrl(null); setVercelProjectName(""); }}
+                  className="w-full mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-300 hover:bg-white/10"
+                >
+                  Close
+                </button>
+              </>
             ) : (
-              // Step 2: Token input
+              // Step 2: Project name + deploy
               <>
                 <div className="flex items-center gap-2 mb-4">
-                  <button
-                    onClick={() => setVercelAuthMethod(null)}
-                    className="text-gray-400 hover:text-gray-200"
-                  >
+                  <button onClick={() => setVercelAuthMethod(null)} className="text-gray-400 hover:text-gray-200">
                     <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
                       <path fillRule="evenodd" d="M9.78 4.22a.75.75 0 010 1.06L7.06 8l2.72 2.72a.75.75 0 11-1.06 1.06L5.47 8.53a.75.75 0 010-1.06l3.25-3.25a.75.75 0 011.06 0z" clipRule="evenodd" />
                     </svg>
@@ -444,24 +468,9 @@ export default function DeployPage() {
                   <h3 className="text-xl font-semibold text-gray-100">Deploy with Token</h3>
                 </div>
                 <p className="text-sm text-gray-400 mb-6">
-                  Get your token from{" "}
-                  <a href="https://vercel.com/account/tokens" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300">
-                    vercel.com/account/tokens
-                  </a>
+                  The Vercel token is configured in the backend. Just confirm the project name.
                 </p>
-
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Vercel Token *</label>
-                    <input
-                      type="password"
-                      value={vercelToken}
-                      onChange={(e) => setVercelToken(e.target.value)}
-                      placeholder="vercel_xxxxxxxxxxxxx"
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:border-indigo-500 focus:outline-none"
-                    />
-                  </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Project Name (optional)</label>
                     <input
@@ -472,39 +481,21 @@ export default function DeployPage() {
                       className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:border-indigo-500 focus:outline-none"
                     />
                   </div>
-
                   <div className="flex gap-3 mt-6">
                     <button
-                      onClick={() => {
-                        setShowVercelModal(false);
-                        setVercelAuthMethod(null);
-                        setVercelToken("");
-                        setVercelProjectName("");
-                      }}
-                      className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-300 transition-colors hover:bg-white/10"
+                      onClick={() => { setShowVercelModal(false); setVercelAuthMethod(null); setVercelProjectName(""); }}
+                      className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-300 hover:bg-white/10"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={async () => {
-                        if (!vercelToken.trim()) {
-                          alert("Please enter your Vercel token");
-                          return;
-                        }
-                        if (!selectedId) {
-                          alert("Please select a project");
-                          return;
-                        }
-
+                        if (!selectedId) { alert("Please select a project"); return; }
                         setDeployingToVercel(true);
                         setError(null);
                         try {
-                          const result = await api.cicd.deployToVercel(selectedId, vercelToken, vercelProjectName || undefined);
-                          alert(`✅ Successfully deployed!\n\nURL: ${result.url}\n\nYour project is now live on Vercel.`);
-                          setShowVercelModal(false);
-                          setVercelAuthMethod(null);
-                          setVercelToken("");
-                          setVercelProjectName("");
+                          const result = await api.cicd.deployToVercel(selectedId, vercelProjectName || undefined);
+                          setVercelLiveUrl(result.url);
                           await loadDeployments(selectedId);
                         } catch (err) {
                           setError(err instanceof Error ? err.message : "Deployment failed");
@@ -512,8 +503,8 @@ export default function DeployPage() {
                           setDeployingToVercel(false);
                         }
                       }}
-                      disabled={deployingToVercel || !vercelToken.trim()}
-                      className="flex-1 rounded-xl border border-indigo-500/50 bg-indigo-500/10 px-4 py-2.5 text-sm font-semibold text-indigo-400 transition-colors hover:bg-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={deployingToVercel}
+                      className="flex-1 rounded-xl border border-indigo-500/50 bg-indigo-500/10 px-4 py-2.5 text-sm font-semibold text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {deployingToVercel ? "Deploying..." : "Deploy Now"}
                     </button>
