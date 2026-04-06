@@ -137,10 +137,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ projectId, taskId, platform }),
       }),
-    deployToVercel: (projectId: string, vercelToken: string, projectName?: string) =>
+    deployToVercel: (projectId: string, projectName?: string) =>
       request<{ success: boolean; deploymentId: string; url: string; message: string }>("/api/cicd/deploy/vercel", {
         method: "POST",
-        body: JSON.stringify({ projectId, vercelToken, projectName }),
+        body: JSON.stringify({ projectId, projectName }),
       }),
     list: (projectId: string) =>
       request<Deployment[]>(`/api/cicd/deployments?projectId=${projectId}`),

@@ -1,7 +1,12 @@
 import logging
 import sys
 from pathlib import Path
-from backend.core.config import config
+try:
+    from core.config import config
+except ModuleNotFoundError:
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
+    from core.config import config
 
 _LEVEL_MAP = {
     "debug": logging.DEBUG,
