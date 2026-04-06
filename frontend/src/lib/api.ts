@@ -200,3 +200,5 @@ export const api = {
     myAlerts: () => request<import("@/types").Alert[]>("/api/admin/my-alerts"),
     myTokenUsage: () => request<import("@/types").UserTokenUsage>("/api/admin/my-token-usage"),
     deleteAccount: () => request<void>("/api/admin/me", { method: "DELETE" }),
+  },
+};
