@@ -4,19 +4,24 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { getPostLoginRoute } from "@/lib/useAuth";
+import { webConfig } from "@/lib/config";
 
 export default function RootPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        void (async () => {
-          router.replace(await getPostLoginRoute(user));
-        })();
-      } else {
-        router.replace("/login");
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) { router.replace("/login"); return; }
+      try {
+        const token = await user.getIdToken(true);
+        const res = await fetch(`${webConfig.apiUrl}/api/admin/users/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const role = res.ok ? (await res.json()).role : "user";
+        router.replace(role === "admin" ? "/admin" : "/home");
+      } catch {
+        router.replace("/home");
       }
     });
     return () => unsub();

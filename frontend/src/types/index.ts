@@ -14,10 +14,7 @@ export interface Project {
   _count?: { tasks: number };
 }
 
-export interface TaskDep {
-  id: string;
-  title: string;
-}
+export interface TaskDep { id: string; title: string; }
 
 export interface Task {
   id: string;
@@ -34,29 +31,11 @@ export interface Task {
   updatedAt: string;
 }
 
-export interface CreateProjectPayload {
-  name: string;
-  description?: string;
-}
+export interface CreateProjectPayload { name: string; description?: string; }
+export interface CreateTaskPayload { title: string; description?: string; projectId: string; status?: TaskStatus; assignedTo?: string; }
 
-export interface CreateTaskPayload {
-  title: string;
-  description?: string;
-  projectId: string;
-  status?: TaskStatus;
-  assignedTo?: string;
-}
-
-export interface DagNode {
-  key: string;
-  title: string;
-  order: number;
-}
-
-export interface DagEdge {
-  from: string;
-  to: string;
-}
+export interface DagNode { key: string; title: string; order: number; }
+export interface DagEdge { from: string; to: string; }
 
 export interface AiPlanResult {
   project: { id: string; name: string };
@@ -65,12 +44,7 @@ export interface AiPlanResult {
   meta: { taskCount: number };
 }
 
-export interface GeneratePlanPayload {
-  projectId: string;
-  description: string;
-}
-
-// ── Observability ─────────────────────────────────────────────────────────────
+export interface GeneratePlanPayload { projectId: string; description: string; }
 
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 export type AgentRunStatus = "RUNNING" | "COMPLETED" | "FAILED";
@@ -121,8 +95,6 @@ export interface TimelineRow {
   stages: TimelineStage[];
 }
 
-// ── File editor ───────────────────────────────────────────────────────────────
-
 export interface ProjectFile {
   id: string;
   projectId: string;
@@ -136,42 +108,11 @@ export interface ProjectFile {
   _count?: { versions: number };
 }
 
-export interface FileVersion {
-  id: string;
-  fileId: string;
-  content: string;
-  size: number;
-  label?: string | null;
-  createdAt: string;
-}
-
-export interface FileVersionMeta {
-  id: string;
-  size: number;
-  label?: string | null;
-  createdAt: string;
-}
-
-export interface CreateFilePayload {
-  projectId: string;
-  path: string;
-  name: string;
-  language?: string;
-  content?: string;
-}
-
-export interface UpdateFilePayload {
-  content: string;
-  createVersion?: boolean;
-  versionLabel?: string;
-}
-
-export interface RenameFilePayload {
-  path: string;
-  name: string;
-}
-
-// ── CI/CD ─────────────────────────────────────────────────────────────────────
+export interface FileVersion { id: string; fileId: string; content: string; size: number; label?: string | null; createdAt: string; }
+export interface FileVersionMeta { id: string; size: number; label?: string | null; createdAt: string; }
+export interface CreateFilePayload { projectId: string; path: string; name: string; language?: string; content?: string; }
+export interface UpdateFilePayload { content: string; createVersion?: boolean; versionLabel?: string; }
+export interface RenameFilePayload { path: string; name: string; }
 
 export type DeploymentStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 
@@ -197,17 +138,48 @@ export interface Deployment {
 }
 
 export interface SummaryStats {
-  tasks: {
-    total: number;
-    byStatus: Partial<Record<TaskStatus, number>>;
-  };
-  agentRuns: {
-    total: number;
-    byStatus: Partial<Record<AgentRunStatus, number>>;
-    avgDurationMs: number;
-  };
-  errors: {
-    total: number;
-    recent: Array<{ id: string; message: string; source: string; createdAt: string; agentType?: string | null }>;
-  };
+  tasks: { total: number; byStatus: Partial<Record<TaskStatus, number>> };
+  agentRuns: { total: number; byStatus: Partial<Record<AgentRunStatus, number>>; avgDurationMs: number };
+  errors: { total: number; recent: Array<{ id: string; message: string; source: string; createdAt: string; agentType?: string | null }> };
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+
+export interface Alert {
+  id: string;
+  message: string;
+  type: "info" | "warning" | "error";
+  targetUid: string | null;
+  sentBy: string;
+  sentByEmail: string;
+  createdAt: string;
+  read: boolean;
+}
+
+// ── User profile / token usage ────────────────────────────────────────────────
+
+export interface UserTokenUsage {
+  uid: string;
+  email: string;
+  role: string;
+  totalTokens: number;
+  callCount: number;
+  lastCallAt: string | null;
+  limit: number;
+  remaining: number;
+  limitExceeded: boolean;
+}
+
+export interface SystemStats {
+  users: number;
+  projects: number;
+  tasks: number;
+  agentRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  deployments: number;
+  successfulDeploys: number;
+  failedDeploys: number;
+  auditLogs: number;
+  totalTokensUsed: number;
 }
