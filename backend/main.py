@@ -3,7 +3,11 @@ import sys
 from pathlib import Path
 
 # Add ai-services to Python path
-sys.path.append(str(Path(__file__).parent.parent / "ai-services"))
+_repo_root = Path(__file__).parent.parent
+for _p in (_repo_root, _repo_root / "ai-services"):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -29,10 +33,10 @@ from backend.api.files.files_service import router as files_router
 from backend.api.cicd.cicd_service import router as cicd_router
 from backend.api.observability.observability_service import router as observe_router
 from backend.api.admin.admin_service import router as admin_router
-from backend.api.dev.dev_service import router as dev_router
 from backend.lib.mcp_server import mcp
 
 import backend.task_queue.worker  # noqa: F401  — ensures sys.path is patched before agent imports
+from backend.api.orchestrator.orchestrator_service import router as orchestrator_router
 
 
 @asynccontextmanager
@@ -84,7 +88,7 @@ app.include_router(files_router, prefix="/api/files", tags=["Files"])
 app.include_router(cicd_router, prefix="/api/cicd", tags=["CI/CD"])
 app.include_router(observe_router, prefix="/api/observe", tags=["Observability"])
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
-app.include_router(dev_router, prefix="/api/dev", tags=["Development"])
+app.include_router(orchestrator_router, prefix="/api/orchestrator", tags=["Orchestrator"])
 
 
 @app.get("/health")

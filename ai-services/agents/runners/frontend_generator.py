@@ -30,7 +30,7 @@ class FrontendGeneratorAgent:
                 f"Description: {ctx.projectDescription}\n\n"
                 "Generate a complete, working index.html frontend for this project."
             )),
-        ], max_tokens=8192, json_mode=False)
+        ], max_tokens=4096, json_mode=False)
 
         html = result.content.strip()
         # Strip accidental markdown fences

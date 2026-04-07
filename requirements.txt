@@ -33,3 +33,18 @@ mcp[cli]>=1.0.0
 
 # Utilities
 python-dateutil>=2.9.0
+
+# ── New: Orchestrator / Agent Platform ────────────────────────────────────────
+
+# Docker SDK — execution sandbox
+docker>=7.0.0
+
+# Vector memory (optional — uncomment when Qdrant is available)
+# qdrant-client>=1.9.0
+# sentence-transformers>=3.0.0
+
+# Graph memory (optional — uncomment when Neo4j is available)
+# neo4j>=5.20.0
+
+# Git integration — uses httpx (already a dependency above), no extra install needed
+# PyGithub>=2.3.0  # optional higher-level wrapper

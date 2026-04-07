@@ -38,7 +38,7 @@ class UpdateProjectRequest(BaseModel):
 @router.get("/")
 async def list_projects(user: AuthUser = Depends(get_current_user)):
     """List all projects for the current user."""
-    docs = db.collection("projects").where("ownerId", "==", user.uid).stream()
+    docs = db.collection("projects").where(filter=("ownerId", "==", user.uid)).stream()
     projects = [{"id": d.id, **d.to_dict()} for d in docs]
     projects.sort(
         key=lambda item: item.get("createdAt") or item.get("updatedAt") or item["id"],
@@ -128,32 +128,33 @@ async def delete_project(project_id: str, user: AuthUser = Depends(get_current_u
         "auditLogs": 0,
     }
 
-    tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
+    tasks = list(db.collection("tasks").where(filter=("projectId", "==", project_id)).stream())
+
     deleted_counts["tasks"] = _delete_docs(tasks)
 
-    files = list(db.collection("files").where("projectId", "==", project_id).stream())
+    files = list(db.collection("files").where(filter=("projectId", "==", project_id)).stream())
     deleted_counts["files"] = _delete_docs(files)
 
-    legacy_files = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
+    legacy_files = list(db.collection("projectFiles").where(filter=("projectId", "==", project_id)).stream())
     deleted_counts["legacyFiles"] = _delete_docs(legacy_files)
 
     file_ids = [doc.id for doc in files] + [doc.id for doc in legacy_files]
     file_version_docs = []
     for file_id in file_ids:
-        file_version_docs.extend(list(db.collection("fileVersions").where("fileId", "==", file_id).stream()))
+        file_version_docs.extend(list(db.collection("fileVersions").where(filter=("fileId", "==", file_id)).stream()))
     deleted_counts["fileVersions"] = _delete_docs(file_version_docs)
 
     deleted_counts["agentRuns"] = _delete_docs(
-        db.collection("agentRuns").where("projectId", "==", project_id).stream()
+        db.collection("agentRuns").where(filter=("projectId", "==", project_id)).stream()
     )
     deleted_counts["deployments"] = _delete_docs(
-        db.collection("deployments").where("projectId", "==", project_id).stream()
+        db.collection("deployments").where(filter=("projectId", "==", project_id)).stream()
     )
     deleted_counts["observabilityLogs"] = _delete_docs(
-        db.collection("observabilityLogs").where("projectId", "==", project_id).stream()
+        db.collection("observabilityLogs").where(filter=("projectId", "==", project_id)).stream()
     )
     deleted_counts["aiPlanRuns"] = _delete_docs(
-        db.collection("aiPlanRuns").where("projectId", "==", project_id).stream()
+        db.collection("aiPlanRuns").where(filter=("projectId", "==", project_id)).stream()
     )
 
     audit_logs = []

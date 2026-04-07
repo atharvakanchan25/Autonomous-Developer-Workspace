@@ -21,6 +21,7 @@ class Config(BaseSettings):
     RATE_LIMIT_WINDOW_MS: int = 60_000
     RATE_LIMIT_MAX: int = 200
     VERCEL_TOKEN: str = ""
+    GITHUB_TOKEN: str = ""
 
     @validator("CORS_ORIGIN", pre=True)
     def strip_cors_origin(cls, v: str) -> str:

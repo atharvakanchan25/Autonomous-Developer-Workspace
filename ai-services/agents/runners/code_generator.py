@@ -271,7 +271,7 @@ class CodeGeneratorAgent:
                 "- No markdown fences inside any content string."
             )),
             LlmMessage(role="user", content=user_msg),
-        ], max_tokens=8192, json_mode=True)
+        ], max_tokens=4096, json_mode=True)
 
         raw_name: str
         code: str
@@ -294,7 +294,7 @@ class CodeGeneratorAgent:
                     f"Output ONLY the raw {language.title()} code. No explanation, no markdown fences."
                 )),
                 LlmMessage(role="user", content=user_msg),
-            ], max_tokens=8192, json_mode=False)
+            ], max_tokens=4096, json_mode=False)
             raw_name = ctx.taskTitle
             code = retry.content.strip()
             # Strip accidental markdown fences from retry
@@ -372,7 +372,7 @@ class CodeGeneratorAgent:
                 f"Task: {ctx.taskTitle}\n"
                 f"Description: {ctx.taskDescription}"
             )),
-        ], max_tokens=8192, json_mode=True)
+        ], max_tokens=4096, json_mode=True)
 
         try:
             parsed = json.loads(result.content)

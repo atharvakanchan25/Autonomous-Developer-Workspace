@@ -77,7 +77,7 @@ def _resolve_user_doc(user_identifier: str):
         return direct
 
     for field in ("uid", "email"):
-        matches = list(db.collection("users").where(field, "==", user_identifier).limit(1).stream())
+        matches = list(db.collection("users").where(filter=(field, "==", user_identifier)).limit(1).stream())
         if matches:
             return matches[0]
 
@@ -85,11 +85,11 @@ def _resolve_user_doc(user_identifier: str):
 
 
 def _safe_task_count(project_id: str) -> int:
-    return len(list(db.collection("tasks").where("projectId", "==", project_id).stream()))
+    return len(list(db.collection("tasks").where(filter=("projectId", "==", project_id)).stream()))
 
 
 def _safe_project_count(owner_id: str) -> int:
-    return len(list(db.collection("projects").where("ownerId", "==", owner_id).stream()))
+    return len(list(db.collection("projects").where(filter=("ownerId", "==", owner_id)).stream()))
 
 
 def _token_calls_for_user(uid: str) -> list[dict[str, Any]]:
@@ -115,7 +115,7 @@ def _token_calls_for_user(uid: str) -> list[dict[str, Any]]:
             "createdAt": run.get("createdAt", ""),
         })
 
-    for doc in db.collection("aiPlanRuns").where("uid", "==", uid).stream():
+    for doc in db.collection("aiPlanRuns").where(filter=("uid", "==", uid)).stream():
         run = doc.to_dict()
         calls.append({
             "id": doc.id,
@@ -414,7 +414,7 @@ async def admin_delete_project(
         "auditLogs": 0,
     }
 
-    tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
+    tasks = list(db.collection("tasks").where(filter=("projectId", "==", project_id)).stream())
     deleted_counts["tasks"] = len(tasks)
     for idx in range(0, len(tasks), 400):
         batch = db.batch()
@@ -422,7 +422,7 @@ async def admin_delete_project(
             batch.delete(task.reference)
         batch.commit()
 
-    files = list(db.collection("files").where("projectId", "==", project_id).stream())
+    files = list(db.collection("files").where(filter=("projectId", "==", project_id)).stream())
     deleted_counts["files"] = len(files)
     for idx in range(0, len(files), 400):
         batch = db.batch()
@@ -430,7 +430,7 @@ async def admin_delete_project(
             batch.delete(file_doc.reference)
         batch.commit()
 
-    legacy_files = list(db.collection("projectFiles").where("projectId", "==", project_id).stream())
+    legacy_files = list(db.collection("projectFiles").where(filter=("projectId", "==", project_id)).stream())
     deleted_counts["legacyFiles"] = len(legacy_files)
     for idx in range(0, len(legacy_files), 400):
         batch = db.batch()
@@ -441,7 +441,7 @@ async def admin_delete_project(
     file_ids = [doc.id for doc in files] + [doc.id for doc in legacy_files]
     file_versions = []
     for file_id in file_ids:
-        file_versions.extend(list(db.collection("fileVersions").where("fileId", "==", file_id).stream()))
+        file_versions.extend(list(db.collection("fileVersions").where(filter=("fileId", "==", file_id)).stream()))
     deleted_counts["fileVersions"] = len(file_versions)
     for idx in range(0, len(file_versions), 400):
         batch = db.batch()
@@ -455,7 +455,7 @@ async def admin_delete_project(
         ("observabilityLogs", "observabilityLogs"),
         ("aiPlanRuns", "aiPlanRuns"),
     ]:
-        docs = list(db.collection(collection).where("projectId", "==", project_id).stream())
+        docs = list(db.collection(collection).where(filter=("projectId", "==", project_id)).stream())
         deleted_counts[key] = len(docs)
         for idx in range(0, len(docs), 400):
             batch = db.batch()
@@ -523,10 +523,10 @@ async def get_user_activity(
     doc = _resolve_user_doc(user_id)
 
     user_doc = doc.to_dict()
-    projects = list(db.collection("projects").where("ownerId", "==", user_id).stream())
-    tasks = list(db.collection("tasks").where("ownerId", "==", user_id).stream())
+    projects = list(db.collection("projects").where(filter=("ownerId", "==", user_id)).stream())
+    tasks = list(db.collection("tasks").where(filter=("ownerId", "==", user_id)).stream())
     logs = sorted(
-        [{"id": log.id, **log.to_dict()} for log in db.collection("audit_logs").where("userId", "==", user_id).stream()],
+        [{"id": log.id, **log.to_dict()} for log in db.collection("audit_logs").where(filter=("userId", "==", user_id)).stream()],
         key=lambda item: item.get("createdAt", ""),
         reverse=True,
     )[:25]
@@ -539,7 +539,7 @@ async def get_user_activity(
         "stats": {
             "projectCount": len(projects),
             "taskCount": len(tasks),
-            "actionCount": len(list(db.collection("audit_logs").where("userId", "==", user_id).stream())),
+            "actionCount": len(list(db.collection("audit_logs").where(filter=("userId", "==", user_id)).stream())),
         },
         "activity": logs,
     }
@@ -553,7 +553,7 @@ async def get_user_projects(
     doc = _resolve_user_doc(user_id)
 
     projects = sorted(
-        list(db.collection("projects").where("ownerId", "==", user_id).stream()),
+        list(db.collection("projects").where(filter=("ownerId", "==", user_id)).stream()),
         key=lambda project: project.to_dict().get("createdAt", ""),
         reverse=True,
     )

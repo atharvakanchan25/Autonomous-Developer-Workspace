@@ -7,8 +7,13 @@ services:
       - "${BACKEND_PORT:-4000}:4000"
     volumes:
       - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock  # sandbox needs Docker socket
     env_file:
       - .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
     restart: unless-stopped
 
   frontend:
@@ -25,3 +30,15 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:

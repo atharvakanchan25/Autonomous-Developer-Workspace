@@ -13,5 +13,5 @@ for _p in (_root, _backend, _ai):
 
 
 async def run_pipeline(task_id: str) -> None:
-    from agents.agent_dispatcher import dispatch_pipeline
-    await dispatch_pipeline(task_id)
+    from agents.langgraph_pipeline import run_langgraph_pipeline
+    await run_langgraph_pipeline(task_id)

@@ -14,6 +14,8 @@ from core.logger import logger
 DEFAULT_MODEL = "llama-3.3-70b-versatile"
 _MAX_RETRIES = 6
 _BASE_WAIT = 15.0
+_INTER_CALL_DELAY = 3.0   # seconds between LLM calls to stay within RPM limits
+_DEFAULT_MAX_TOKENS = 2048  # conservative default to preserve TPM quota
 
 
 @dataclass
@@ -36,9 +38,10 @@ def _parse_retry_after(err: RateLimitError) -> float:
 async def call_llm(
     messages: list[LlmMessage],
     model: str = DEFAULT_MODEL,
-    max_tokens: int = 4096,
+    max_tokens: int = _DEFAULT_MAX_TOKENS,
     json_mode: bool = False,
 ) -> LlmResult:
+    await asyncio.sleep(_INTER_CALL_DELAY)
     groq_messages = [{"role": m.role, "content": m.content} for m in messages]
 
     kwargs: dict = {

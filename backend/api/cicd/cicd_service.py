@@ -92,7 +92,7 @@ async def list_deployments(projectId: str, user: AuthUser = Depends(get_current_
     if not user.can_access_resource(project.get("ownerId")):
         raise not_found("Project")
     
-    docs = db.collection("deployments").where("projectId", "==", projectId).order_by("createdAt", direction=firestore.Query.DESCENDING).limit(50).stream()
+    docs = db.collection("deployments").where(filter=("projectId", "==", projectId)).order_by("createdAt", direction=firestore.Query.DESCENDING).limit(50).stream()
     return [{"id": d.id, **d.to_dict()} for d in docs]
 
 @router.get("/status")
@@ -126,7 +126,7 @@ async def deploy_to_vercel(body: VercelDeployRequest, user: AuthUser = Depends(g
     # Fetch only HTML/CSS/JS files for this project
     file_docs = list(
         db.collection("files")
-        .where("projectId", "==", body.projectId)
+        .where(filter=("projectId", "==", body.projectId))
         .stream()
     )
 
