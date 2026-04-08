@@ -126,7 +126,7 @@ async def get_orchestrator_session(project_id: str, user: AuthUser = Depends(get
     # Fall back to Firestore
     docs = (
         db.collection("orchestratorSessions")
-        .where(filter=("projectId", "==", project_id))
+        .where("projectId", "==", project_id)
         .limit(1)
         .stream()
     )
@@ -149,7 +149,7 @@ async def list_sessions(
 
     docs = (
         db.collection("orchestratorSessions")
-        .where(filter=("projectId", "==", projectId))
+        .where("projectId", "==", projectId)
         .limit(20)
         .stream()
     )
@@ -412,7 +412,7 @@ async def list_git_commits(
 
     docs = (
         db.collection("gitCommits")
-        .where(filter=("projectId", "==", projectId))
+        .where("projectId", "==", projectId)
         .limit(50)
         .stream()
     )
@@ -448,10 +448,10 @@ async def memory_graph(
         raise not_found("Project")
 
     nodes = list(
-        db.collection("graphNodes").where(filter=("projectId", "==", projectId)).stream()
+        db.collection("graphNodes").where("projectId", "==", projectId).stream()
     )
     edges = list(
-        db.collection("graphEdges").where(filter=("projectId", "==", projectId)).stream()
+        db.collection("graphEdges").where("projectId", "==", projectId).stream()
     )
     return {
         "nodes": [{"id": d.id, **d.to_dict()} for d in nodes],

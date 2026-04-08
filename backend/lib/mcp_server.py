@@ -53,7 +53,7 @@ def _load_project(project_id: str) -> dict[str, Any]:
 def _load_project_tasks(project_id: str) -> list[dict[str, Any]]:
     docs = (
         db.collection("tasks")
-        .where(filter=("projectId", "==", project_id))
+        .where("projectId", "==", project_id)
         .stream()
     )
     tasks = [_serialize_task(doc.id, doc.to_dict()) for doc in docs]
@@ -70,7 +70,7 @@ def _load_project_files(
     for collection_name in _FILE_COLLECTIONS:
         docs = list(
             db.collection(collection_name)
-            .where(filter=("projectId", "==", project_id))
+            .where("projectId", "==", project_id)
             .stream()
         )
         if not docs:

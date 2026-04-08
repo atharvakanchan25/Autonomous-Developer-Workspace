@@ -268,10 +268,13 @@ class CodeGeneratorAgent:
                 f"- Use modern {language.title()} best practices{framework_hint}.\n"
                 "- Include all necessary imports.\n"
                 "- One file entry, focused on exactly what the task describes.\n"
-                "- No markdown fences inside any content string."
+                "- No markdown fences inside any content string.\n"
+                "CRITICAL: Do NOT use triple-quoted strings anywhere in the code. Use single-line # comments only. The entire response must be valid JSON."
             )),
             LlmMessage(role="user", content=user_msg),
         ], max_tokens=4096, json_mode=True)
+
+        result.content = result.content.replace('"""', '#')
 
         raw_name: str
         code: str
@@ -367,12 +370,15 @@ class CodeGeneratorAgent:
                 "- Update stat counts dynamically\n"
                 "- Use relevant emojis in sidebar and stats\n"
                 "- All CRUD operations using localStorage\n"
+                "CRITICAL: Do NOT use triple-quoted strings anywhere in the code. Use single-line # comments only. The entire response must be valid JSON.\n"
             )),
             LlmMessage(role="user", content=(
                 f"Task: {ctx.taskTitle}\n"
                 f"Description: {ctx.taskDescription}"
             )),
         ], max_tokens=4096, json_mode=True)
+
+        result.content = result.content.replace('"""', '#')
 
         try:
             parsed = json.loads(result.content)

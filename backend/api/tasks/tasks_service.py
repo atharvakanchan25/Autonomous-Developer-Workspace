@@ -75,12 +75,12 @@ async def list_tasks(
         project = project_doc.to_dict()
         if not user.can_access_resource(project.get("ownerId")):
             return []
-        query = query.where(filter=("projectId", "==", projectId))
+        query = query.where("projectId", "==", projectId)
     else:
-        query = query.where(filter=("ownerId", "==", user.uid))
+        query = query.where("ownerId", "==", user.uid)
     
     if status:
-        query = query.where(filter=("status", "==", status))
+        query = query.where("status", "==", status)
     
     tasks = [serialize_task(d.id, d.to_dict()) for d in query.stream()]
     if projectId:

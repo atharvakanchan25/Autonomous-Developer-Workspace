@@ -92,7 +92,7 @@ class VectorMemory:
         try:
             docs = (
                 db.collection("vectorChunks")
-                .where(filter=("projectId", "==", self.project_id))
+                .where("projectId", "==", self.project_id)
                 .stream()
             )
             for doc in docs:
@@ -228,7 +228,7 @@ class ProjectMemory:
         try:
             docs = (
                 db.collection("files")
-                .where(filter=("projectId", "==", self.project_id))
+                .where("projectId", "==", self.project_id)
                 .stream()
             )
             for doc in docs:
@@ -253,7 +253,7 @@ class ProjectMemory:
         try:
             task_docs = (
                 db.collection("tasks")
-                .where(filter=("projectId", "==", self.project_id))
+                .where("projectId", "==", self.project_id)
                 .stream()
             )
             tasks = [{"id": d.id, **d.to_dict()} for d in task_docs]
@@ -261,7 +261,7 @@ class ProjectMemory:
 
             file_docs = (
                 db.collection("files")
-                .where(filter=("projectId", "==", self.project_id))
+                .where("projectId", "==", self.project_id)
                 .stream()
             )
             files = [{"id": d.id, **d.to_dict()} for d in file_docs]

@@ -19,7 +19,7 @@ def _verify_project(project_id: str, user: AuthUser) -> dict:
 
 
 def _user_project_ids(user: AuthUser) -> list[str]:
-    docs = db.collection("projects").where(filter=("ownerId", "==", user.uid)).stream()
+    docs = db.collection("projects").where("ownerId", "==", user.uid).stream()
     return [d.id for d in docs]
 
 
@@ -40,15 +40,15 @@ async def get_observability_summary(
     """
     if projectId:
         _verify_project(projectId, user)
-        task_docs = list(db.collection("tasks").where(filter=("projectId", "==", projectId)).stream())
-        run_docs  = list(db.collection("agentRuns").where(filter=("projectId", "==", projectId)).stream())
-        err_docs  = list(
+        task_docs = list(db.collection("tasks").where("projectId", "==", projectId).stream())
+        run_docs  = list(db.collection("agentRuns").where("projectId", "==", projectId).stream())
+        err_docs  = sorted(
             db.collection("observabilityLogs")
-            .where(filter=("projectId", "==", projectId))
-            .where(filter=("level", "==", "error"))
-            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+            .where("projectId", "==", projectId)
+            .where("level", "==", "error")
             .limit(5)
-            .stream()
+            .stream(),
+            key=lambda d: d.to_dict().get("createdAt", ""), reverse=True
         )
     else:
         project_ids = _user_project_ids(user)
@@ -58,16 +58,16 @@ async def get_observability_summary(
                 "agentRuns": {"total": 0, "byStatus": {}, "avgDurationMs": 0},
                 "errors":    {"total": 0, "recent": []},
             }
-        task_docs = list(db.collection("tasks").where(filter=("ownerId", "==", user.uid)).stream())
+        task_docs = list(db.collection("tasks").where("ownerId", "==", user.uid).stream())
         # agentRuns don't have ownerId — collect across all user projects
         run_docs = []
         err_docs = []
         for pid in project_ids[:10]:  # cap to avoid too many reads
-            run_docs += list(db.collection("agentRuns").where(filter=("projectId", "==", pid)).stream())
+            run_docs += list(db.collection("agentRuns").where("projectId", "==", pid).stream())
             err_docs += list(
                 db.collection("observabilityLogs")
-                .where(filter=("projectId", "==", pid))
-                .where(filter=("level", "==", "error"))
+                .where("projectId", "==", pid)
+                .where("level", "==", "error")
                 .limit(3)
                 .stream()
             )
@@ -136,12 +136,12 @@ async def get_agent_runs(
     """
     if projectId:
         _verify_project(projectId, user)
-        run_docs = list(
+        run_docs = sorted(
             db.collection("agentRuns")
-            .where(filter=("projectId", "==", projectId))
-            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+            .where("projectId", "==", projectId)
             .limit(limit)
-            .stream()
+            .stream(),
+            key=lambda d: d.to_dict().get("createdAt", ""), reverse=True
         )
     else:
         project_ids = _user_project_ids(user)
@@ -149,8 +149,7 @@ async def get_agent_runs(
         for pid in project_ids[:10]:
             run_docs += list(
                 db.collection("agentRuns")
-                .where(filter=("projectId", "==", pid))
-                .order_by("createdAt", direction=firestore.Query.DESCENDING)
+                .where("projectId", "==", pid)
                 .limit(limit)
                 .stream()
             )
@@ -214,22 +213,22 @@ async def get_project_timeline(
 
     rows = []
     for pid in project_ids[:10]:
-        task_docs = list(
+        task_docs = sorted(
             db.collection("tasks")
-            .where(filter=("projectId", "==", pid))
-            .order_by("updatedAt", direction=firestore.Query.DESCENDING)
+            .where("projectId", "==", pid)
             .limit(20)
-            .stream()
+            .stream(),
+            key=lambda d: d.to_dict().get("updatedAt", ""), reverse=True
         )
         for tdoc in task_docs:
             tdata = tdoc.to_dict()
 
             # Fetch agent runs for this task as stages
-            run_docs = list(
+            run_docs = sorted(
                 db.collection("agentRuns")
-                .where(filter=("taskId", "==", tdoc.id))
-                .order_by("createdAt")
-                .stream()
+                .where("taskId", "==", tdoc.id)
+                .stream(),
+                key=lambda d: d.to_dict().get("createdAt", "")
             )
             stages = []
             total_ms = 0
@@ -274,13 +273,13 @@ async def get_error_logs(
     if projectId:
         _verify_project(projectId, user)
         # stored as lowercase "error" by emitter.py
-        docs = list(
+        docs = sorted(
             db.collection("observabilityLogs")
-            .where(filter=("projectId", "==", projectId))
-            .where(filter=("level", "==", "error"))
-            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+            .where("projectId", "==", projectId)
+            .where("level", "==", "error")
             .limit(limit)
-            .stream()
+            .stream(),
+            key=lambda d: d.to_dict().get("createdAt", ""), reverse=True
         )
     else:
         project_ids = _user_project_ids(user)
@@ -288,9 +287,8 @@ async def get_error_logs(
         for pid in project_ids[:10]:
             docs += list(
                 db.collection("observabilityLogs")
-                .where(filter=("projectId", "==", pid))
-                .where(filter=("level", "==", "error"))
-                .order_by("createdAt", direction=firestore.Query.DESCENDING)
+                .where("projectId", "==", pid)
+                .where("level", "==", "error")
                 .limit(limit)
                 .stream()
             )
@@ -314,21 +312,20 @@ async def get_logs(
     """
     if projectId:
         _verify_project(projectId, user)
-        query = (
+        docs = sorted(
             db.collection("observabilityLogs")
-            .where(filter=("projectId", "==", projectId))
-            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+            .where("projectId", "==", projectId)
             .limit(limit)
+            .stream(),
+            key=lambda d: d.to_dict().get("createdAt", ""), reverse=True
         )
-        docs = list(query.stream())
     else:
         project_ids = _user_project_ids(user)
         docs = []
         for pid in project_ids[:10]:
             docs += list(
                 db.collection("observabilityLogs")
-                .where(filter=("projectId", "==", pid))
-                .order_by("createdAt", direction=firestore.Query.DESCENDING)
+                .where("projectId", "==", pid)
                 .limit(limit)
                 .stream()
             )

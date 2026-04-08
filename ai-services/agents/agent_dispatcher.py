@@ -45,8 +45,8 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult], own
             files_ref = db.collection("files")
             existing_docs = list(
                 files_ref
-                .where(filter=("projectId", "==", project_id))
-                .where(filter=("path", "==", artifact.filename))
+                .where("projectId", "==", project_id)
+                .where("path", "==", artifact.filename)
                 .limit(1)
                 .stream()
             )
@@ -232,15 +232,15 @@ async def _maybe_run_frontend_generator(project_id: str) -> None:
     try:
         existing = list(
             db.collection("files")
-            .where(filter=("projectId", "==", project_id))
-            .where(filter=("path", "==", "frontend/index.html"))
+            .where("projectId", "==", project_id)
+            .where("path", "==", "frontend/index.html")
             .limit(1)
             .stream()
         )
         if existing:
             return
 
-        all_tasks = list(db.collection("tasks").where(filter=("projectId", "==", project_id)).stream())
+        all_tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
         if not all_tasks or not all(t.to_dict().get("status") == "COMPLETED" for t in all_tasks):
             return
 
@@ -279,7 +279,7 @@ async def _maybe_run_frontend_generator(project_id: str) -> None:
 async def _maybe_run_scaffold(project_id: str) -> None:
     """Run the scaffold agent once when every task in the project is COMPLETED."""
     try:
-        all_tasks = list(db.collection("tasks").where(filter=("projectId", "==", project_id)).stream())
+        all_tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
         if not all_tasks:
             return
         statuses = [t.to_dict().get("status") for t in all_tasks]
@@ -288,8 +288,8 @@ async def _maybe_run_scaffold(project_id: str) -> None:
 
         existing = list(
             db.collection("files")
-            .where(filter=("projectId", "==", project_id))
-            .where(filter=("path", "==", "README.md"))
+            .where("projectId", "==", project_id)
+            .where("path", "==", "README.md")
             .limit(1)
             .stream()
         )
@@ -299,12 +299,12 @@ async def _maybe_run_scaffold(project_id: str) -> None:
         logger.info(f"All tasks complete — running scaffold for project={project_id}")
         project = _get_project(project_id)
 
-        file_docs = list(db.collection("files").where(filter=("projectId", "==", project_id)).stream())
+        file_docs = list(db.collection("files").where("projectId", "==", project_id).stream())
 
         run_docs = list(
             db.collection("agentRuns")
-            .where(filter=("projectId", "==", project_id))
-            .where(filter=("status", "==", "COMPLETED"))
+            .where("projectId", "==", project_id)
+            .where("status", "==", "COMPLETED")
             .stream()
         )
 

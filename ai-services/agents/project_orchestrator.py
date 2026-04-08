@@ -21,7 +21,7 @@ _active_projects: set[str] = set()
 
 
 def _load_project_tasks(project_id: str) -> list[dict]:
-    docs = db.collection("tasks").where(filter=("projectId", "==", project_id)).stream()
+    docs = db.collection("tasks").where("projectId", "==", project_id).stream()
     tasks = [{"id": doc.id, **doc.to_dict()} for doc in docs]
     return sorted(tasks, key=lambda task: (task.get("order", 0), task.get("createdAt", "")))
 

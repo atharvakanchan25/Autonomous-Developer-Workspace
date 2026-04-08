@@ -69,7 +69,7 @@ def _save_session(session: OrchestratorSession) -> None:
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _load_tasks(project_id: str) -> list[dict]:
-    docs = db.collection("tasks").where(filter=("projectId", "==", project_id)).stream()
+    docs = db.collection("tasks").where("projectId", "==", project_id).stream()
     tasks = [{"id": d.id, **d.to_dict()} for d in docs]
     return sorted(tasks, key=lambda t: (t.get("order", 0), t.get("createdAt", "")))
 

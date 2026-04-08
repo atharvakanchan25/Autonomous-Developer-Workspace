@@ -54,7 +54,8 @@ class CodeReviewerAgent:
                     "### Strengths\n- bullet points\n\n"
                     "### Issues\n- bullet points (or '- None' if clean)\n\n"
                     "### Recommendations\n- bullet points\n\n"
-                    "Keep markdown under 300 words."
+                    "Keep markdown under 300 words.\n\n"
+                    "CRITICAL: Do NOT use triple-quoted strings. Use single-line # comments only. The entire response must be valid JSON."
                 )),
                 LlmMessage(role="user", content=(
                     f"Task: {ctx.taskTitle}\n"
@@ -65,6 +66,8 @@ class CodeReviewerAgent:
             max_tokens=1024,
             json_mode=True,
         )
+
+        result.content = result.content.replace('"""', '#')
 
         try:
             parsed = json.loads(result.content)

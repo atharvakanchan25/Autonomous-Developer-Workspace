@@ -23,9 +23,18 @@ import type {
 const BASE = webConfig.apiUrl;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await auth.currentUser?.getIdToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const user = auth.currentUser;
+  if (!user) throw new Error("No authenticated user. Please sign in.");
+  let token: string;
+  try {
+    token = await user.getIdToken();
+  } catch {
+    token = await user.getIdToken(true);
+  }
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  };
 
   const res = await fetch(`${BASE}${path}`, {
     headers,
