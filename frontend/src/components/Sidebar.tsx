@@ -7,6 +7,8 @@ import { duration } from "@/lib/motion";
 import { auth, signOut } from "@/lib/firebase";
 import type { User } from "firebase/auth";
 import { useAuth } from "@/lib/useAuth";
+import { ShinyText } from "@/components/ui/ShinyText";
+import { GlowingEffect } from "@/components/ui/GlowingEffect";
 
 const NAV = [
   {
@@ -98,7 +100,7 @@ const NAV = [
 
 function Avatar({ user, isAdmin, size = "md" }: { user: User; isAdmin: boolean; size?: "sm" | "md" }) {
   const dim = size === "sm" ? "h-7 w-7 text-[10px]" : "h-8 w-8 text-xs";
-  const ring = isAdmin ? "ring-2 ring-red-400/70" : "ring-2 ring-[rgba(45,212,191,0.35)]";
+  const ring = isAdmin ? "ring-2 ring-red-400/70" : "ring-1 ring-white/20";
 
   if (user.photoURL) {
     return (
@@ -142,23 +144,8 @@ export function Sidebar() {
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            {/* Animated gradient background */}
-            <motion.div
-              className="absolute inset-0 rounded-[14px] bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 opacity-90"
-              animate={{
-                rotate: [0, 360],
-              }}
-              transition={{
-                duration: 8,
-                repeat: Infinity,
-                ease: "linear",
-              }}
-            />
-            {/* Glow effect */}
-            <div className="absolute inset-0 rounded-[14px] bg-gradient-to-br from-indigo-400 via-purple-400 to-pink-400 blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-300" />
-            
-            {/* Icon container */}
-            <div className="relative z-10 flex h-full w-full items-center justify-center rounded-[14px] bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600">
+            <div className="absolute inset-0 rounded-[14px] bg-[#050505] border border-white/5" />
+            <div className="relative z-10 flex h-full w-full items-center justify-center rounded-[14px] bg-[#000000]">
               {/* AI Brain/Neural Network Icon */}
               <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 text-white drop-shadow-lg">
                 {/* Center node */}
@@ -219,13 +206,13 @@ export function Sidebar() {
           
           <div className="flex flex-col">
             <motion.span 
-              className="font-display block text-[15px] font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent"
+              className="font-display block text-[15px] font-bold tracking-tight text-white"
               whileHover={{ scale: 1.02 }}
               transition={{ duration: 0.2 }}
             >
-              ADW
+              <ShinyText text="ADW" speed={3} className="text-white drop-shadow-sm" />
             </motion.span>
-            <span className="block text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 group-hover:text-gray-400 transition-colors">
+            <span className="block text-[10px] font-medium uppercase tracking-[0.15em] text-[var(--text-muted)] group-hover:text-white transition-colors">
               AI Workspace
             </span>
           </div>
@@ -244,15 +231,17 @@ export function Sidebar() {
             return (
               <li key={href}>
                 <Link href={href} className="relative block">
-                  {active && <span className="absolute inset-0 rounded-2xl border border-[rgba(45,212,191,0.16)] bg-[linear-gradient(90deg,rgba(45,212,191,0.16),rgba(45,212,191,0.04))]" />}
-                  <span
-                    className={`relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm transition-colors ${
-                      active ? "font-medium text-[var(--accent)]" : "text-[var(--text-secondary)] hover:bg-white/5 hover:text-white"
-                    }`}
-                  >
-                    <span className={`flex h-9 w-9 items-center justify-center rounded-xl border ${active ? "border-[rgba(45,212,191,0.2)] bg-[rgba(45,212,191,0.12)] text-[var(--accent)]" : "border-white/10 bg-white/5 text-[var(--text-muted)]"}`}>{icon}</span>
-                  {label}
-                </span>
+                  <GlowingEffect active={active} blur={6} spread={0.5} color="rgba(255, 255, 255, 0.20)">
+                    {active && <span className="absolute inset-0 rounded-2xl border border-white/10 bg-white/5" />}
+                    <span
+                      className={`relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm transition-all ${
+                        active ? "font-medium text-white" : "text-[var(--text-secondary)] hover:bg-white/[0.04] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      <span className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${active ? "border-white/20 bg-white/10 text-white" : "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)]"}`}>{icon}</span>
+                      {label}
+                    </span>
+                  </GlowingEffect>
                 </Link>
               </li>
             );
@@ -292,7 +281,7 @@ export function Sidebar() {
             </Link>
             <Link
               href="/about"
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-400 transition-colors hover:bg-white/10 hover:text-gray-300"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:bg-[rgba(167,139,250,0.08)] hover:text-[var(--accent)]"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
