@@ -1,21 +1,29 @@
 import type { Metadata } from "next";
-import { Manrope, Sora } from "next/font/google";
+import { Inter, Sora } from "next/font/google";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import "./globals.css";
 
-const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
-const sora = Sora({ subsets: ["latin"], variable: "--font-sora" });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+const sora = Sora({
+  subsets: ["latin"],
+  variable: "--font-sora",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Autonomous Developer Workspace",
-  description: "AI-powered developer workspace",
+  description: "AI-powered autonomous developer workspace",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${sora.variable}`}>
-      <body className="text-gray-100 antialiased">
+    <html lang="en" className={`${inter.variable} ${sora.variable}`}>
+      <body className="antialiased">
         <ErrorBoundary>
           <Suspense>{children}</Suspense>
         </ErrorBoundary>

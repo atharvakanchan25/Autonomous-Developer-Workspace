@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from firebase_admin import firestore
+
+_executor = ThreadPoolExecutor(max_workers=8)
 
 from backend.core.database import db
 from backend.core.errors import not_found, bad_request
@@ -93,27 +97,26 @@ def _safe_project_count(owner_id: str) -> int:
 
 
 def _token_calls_for_user(uid: str) -> list[dict[str, Any]]:
-    tasks = {
-        doc.id: doc.to_dict()
-        for doc in db.collection("tasks").where("ownerId", "==", uid).stream()
-    }
+    # Fetch user's task IDs first, then query agentRuns by taskId to avoid full scan
+    task_ids = {doc.id for doc in db.collection("tasks").where("ownerId", "==", uid).stream()}
 
     calls: list[dict[str, Any]] = []
 
-    for doc in db.collection("agentRuns").order_by("createdAt", direction=firestore.Query.DESCENDING).stream():
-        run = doc.to_dict()
-        task = tasks.get(run.get("taskId"))
-        if not task:
-            continue
-        calls.append({
-            "id": doc.id,
-            "source": "agent",
-            "agentType": run.get("agentType", "UNKNOWN"),
-            "prompt": run.get("prompt", ""),
-            "tokensUsed": int(run.get("tokensUsed", 0) or 0),
-            "status": run.get("status", "UNKNOWN"),
-            "createdAt": run.get("createdAt", ""),
-        })
+    # Query agentRuns only for this user's tasks (in batches of 10 for 'in' operator)
+    task_id_list = list(task_ids)
+    for i in range(0, len(task_id_list), 10):
+        batch_ids = task_id_list[i:i + 10]
+        for doc in db.collection("agentRuns").where("taskId", "in", batch_ids).stream():
+            run = doc.to_dict()
+            calls.append({
+                "id": doc.id,
+                "source": "agent",
+                "agentType": run.get("agentType", "UNKNOWN"),
+                "prompt": run.get("prompt", ""),
+                "tokensUsed": int(run.get("tokensUsed", 0) or 0),
+                "status": run.get("status", "UNKNOWN"),
+                "createdAt": run.get("createdAt", ""),
+            })
 
     for doc in db.collection("aiPlanRuns").where("uid", "==", uid).stream():
         run = doc.to_dict()
@@ -316,28 +319,29 @@ async def delete_user(
 
 @router.get("/stats")
 async def get_admin_stats(user: AuthUser = Depends(require_role("admin"))):
+    # Run sequentially — Firestore gRPC client is not thread-safe across executors
     users = _canonical_users()
-    projects = _list_docs("projects")
-    tasks = _list_docs("tasks")
-    agent_runs = _list_docs("agentRuns")
-    audit_logs = _list_docs("audit_logs")
-    plan_runs = _list_docs("aiPlanRuns")
+    projects = list(db.collection("projects").stream())
+    tasks = list(db.collection("tasks").stream())
+    agent_runs = list(db.collection("agentRuns").stream())
+    plan_runs = list(db.collection("aiPlanRuns").stream())
+    audit_count = len(list(db.collection("audit_logs").limit(1000).stream()))
 
-    completed_tasks = sum(1 for task in tasks if task.get("status") == "COMPLETED")
-    completed_runs = sum(1 for run in agent_runs if run.get("status") == "COMPLETED")
-    failed_runs = sum(1 for run in agent_runs if run.get("status") == "FAILED")
-    total_tokens = sum(int(run.get("tokensUsed", 0) or 0) for run in agent_runs + plan_runs)
+    completed_tasks = sum(1 for t in tasks if t.to_dict().get("status") == "COMPLETED")
+    completed_runs  = sum(1 for r in agent_runs if r.to_dict().get("status") == "COMPLETED")
+    failed_runs     = sum(1 for r in agent_runs if r.to_dict().get("status") == "FAILED")
+    total_tokens    = sum(int(r.to_dict().get("tokensUsed", 0) or 0) for r in agent_runs + plan_runs)
 
     return {
         "users": {
             "total": len(users),
-            "admins": sum(1 for item in users if item.get("role") == "admin"),
-            "regular": sum(1 for item in users if item.get("role") != "admin"),
+            "admins": sum(1 for u in users if u.get("role") == "admin"),
+            "regular": sum(1 for u in users if u.get("role") != "admin"),
         },
         "projects": {"total": len(projects)},
         "tasks": {"total": len(tasks), "completed": completed_tasks},
         "agentRuns": {"total": len(agent_runs), "completed": completed_runs, "failed": failed_runs},
-        "auditLogs": {"total": len(audit_logs)},
+        "auditLogs": {"total": audit_count},
         "tokens": {"total": total_tokens},
     }
 
@@ -381,18 +385,10 @@ async def list_audit_logs(
 @router.get("/projects")
 async def list_projects(user: AuthUser = Depends(require_role("admin"))):
     task_counts = _task_counts_by_project()
-    projects = sorted(
-        _list_docs("projects"),
-        key=lambda project: project.get("createdAt", ""),
-        reverse=True,
-    )
+    projects = sorted(_list_docs("projects"), key=lambda p: p.get("createdAt", ""), reverse=True)
     return [
-        {
-            **project,
-            "ownerEmail": project.get("ownerEmail", ""),
-            "taskCount": task_counts.get(project["id"], 0),
-        }
-        for project in projects
+        {**p, "ownerEmail": p.get("ownerEmail", ""), "taskCount": task_counts.get(p["id"], 0)}
+        for p in projects
     ]
 
 
@@ -544,7 +540,7 @@ async def get_user_activity(
         "stats": {
             "projectCount": len(projects),
             "taskCount": len(tasks),
-            "actionCount": len(list(db.collection("audit_logs").where("userId", "==", user_id).stream())),
+            "actionCount": len(logs),
         },
         "activity": logs,
     }

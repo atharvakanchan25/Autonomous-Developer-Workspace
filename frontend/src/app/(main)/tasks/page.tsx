@@ -8,8 +8,10 @@ import { useProjectStore } from "@/lib/useProjectStore";
 import { useAuth } from "@/lib/useAuth";
 import { AdminOnlyToast } from "@/components/AdminOnlyToast";
 import type { Project, Task, TaskStatus } from "@/types";
-import { StatusBadge } from "@/components/StatusBadge";
 import { PageShell } from "@/components/PageShell";
+import { StatusBadge } from "@/components/StatusBadge";
+import { CountUp } from "@/components/ui/CountUp";
+import { SpotlightCard } from "@/components/ui/SpotlightCard";
 import { duration, ease, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
 
 const ALL_STATUSES: TaskStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED"];
@@ -132,12 +134,26 @@ export default function TasksPage() {
             initial="hidden"
             animate="visible"
           >
-            {ALL_STATUSES.map((s) => (
-              <motion.div key={s} variants={fadeUp} className="app-panel rounded-[24px] px-4 py-4 text-center">
-                <p className="text-lg font-semibold text-gray-100">{counts[s]}</p>
-                <p className="text-[11px] text-gray-400">{s.replace("_", " ")}</p>
-              </motion.div>
-            ))}
+            {ALL_STATUSES.map((s) => {
+              const bg = s === "COMPLETED" ? "border-emerald-900/40 bg-[#040a08]/90" : 
+                         s === "FAILED" ? "border-pink-900/40 bg-[#0a0406]/90" :
+                         s === "IN_PROGRESS" ? "border-cyan-900/40 bg-[#04080a]/90" :
+                         "border-gray-800 bg-[#050505]/90";
+              const textColor = s === "COMPLETED" ? "text-emerald-400" :
+                                s === "FAILED" ? "text-pink-400" :
+                                s === "IN_PROGRESS" ? "text-cyan-400" :
+                                "text-gray-400";
+              return (
+                <motion.div key={s} variants={fadeUp} className="flex-1">
+                  <SpotlightCard className={`app-panel-soft h-full rounded-[24px] px-4 py-4 text-center border ${bg}`}>
+                    <p className={`text-xl font-bold ${textColor}`}>
+                      <CountUp to={counts[s]} duration={1.2} />
+                    </p>
+                    <p className="text-[10px] uppercase font-medium tracking-wider text-gray-500 mt-1.5">{s.replace("_", " ")}</p>
+                  </SpotlightCard>
+                </motion.div>
+              );
+            })}
           </motion.div>
         )}
 

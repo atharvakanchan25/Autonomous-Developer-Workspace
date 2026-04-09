@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import type { Project, Task } from "@/types";
 import { PageShell } from "@/components/PageShell";
 import { invalidateProjectSelectCache } from "@/components/ProjectSelect";
+import { SpotlightCard } from "@/components/ui/SpotlightCard";
 import { duration, ease, cardHover, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -341,13 +342,13 @@ export default function ProjectsPage() {
               const isDeleting = deletingId === p.id;
 
               return (
-                <motion.div
+                <SpotlightCard
                   key={p.id}
                   variants={fadeUp}
                   whileHover={cardHover}
-                  className={`app-panel group relative rounded-[28px] p-5 ${
+                  className={`app-panel group relative flex h-full flex-col overflow-hidden rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover ${
                     p.id === createdId
-                      ? "border-[rgba(45,212,191,0.45)] ring-1 ring-[rgba(45,212,191,0.32)]"
+                      ? "border-[rgba(255,255,255,0.45)] ring-1 ring-[rgba(255,255,255,0.32)]"
                       : ""
                   } ${isDeleting ? "opacity-50 pointer-events-none" : ""}`}
                 >
@@ -445,7 +446,7 @@ export default function ProjectsPage() {
                       </Link>
                     </div>
                   </div>
-                </motion.div>
+                </SpotlightCard>
               );
             })}
           </motion.div>

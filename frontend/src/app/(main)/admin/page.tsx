@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { api } from "@/lib/api";
 import { webConfig } from "@/lib/config";
+import { motion, AnimatePresence } from "framer-motion";
+import { SpotlightCard } from "@/components/ui/SpotlightCard";
+import { CountUp } from "@/components/ui/CountUp";
+import { AnimatedList } from "@/components/ui/AnimatedList";
 
 interface AdminProject {
   id: string;
@@ -241,21 +245,11 @@ export default function AdminPage() {
   }, [user, hasRole, dataLoaded, tab, loadedTabs]);
 
   async function loadInitialData() {
-    setLoadingData(true);
     setPanelError(null);
-    await Promise.all([
-      loadStats(),
-      loadSystemHealth(),
-      loadUsers(),
-    ]);
-    setLoadedTabs((prev) => ({
-      ...prev,
-      overview: true,
-      users: true,
-      admins: true,
-      system: true,
-    }));
-    setLoadingData(false);
+    // Only load what's needed for the overview tab
+    loadStats();
+    loadSystemHealth();
+    setLoadedTabs((prev) => ({ ...prev, overview: true, system: true }));
   }
 
   async function loadData() {
@@ -544,7 +538,7 @@ export default function AdminPage() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex gap-1 border-b border-gray-700 bg-[#1a1f2e] px-6 overflow-x-auto">
+      <div className="flex gap-2 border-b border-white/10 bg-[rgba(10,13,36,0.3)] px-6 overflow-x-auto backdrop-blur-md">
         {[
           { id: "overview", label: "Overview", icon: "" },
           { id: "users", label: `Users (${regularUsers.length})`, icon: "" },
@@ -561,12 +555,19 @@ export default function AdminPage() {
               setSelectedUser(null);
               setTokenUser(null);
             }}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
+            className={`relative flex items-center gap-2 px-4 py-4 text-sm font-medium whitespace-nowrap transition-colors ${
               tab === t.id
-                ? "border-indigo-500 text-indigo-400 bg-indigo-900/10"
-                : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
+                ? "text-white"
+                : "text-gray-500 hover:text-gray-300 hover:bg-white/[0.02]"
             }`}
           >
+            {tab === t.id && (
+              <motion.div
+                layoutId="adminActiveTabLine"
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-white"
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            )}
             <span>{t.icon}</span>
             {t.label}
           </button>
@@ -589,69 +590,87 @@ export default function AdminPage() {
           </div>
         ) : tab === "overview" ? (
           <div className="space-y-6">
-            {/* Stats Overview */}
-            {stats && (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                <SpotlightCard className="app-panel-soft rounded-2xl p-5 border border-purple-900/40 bg-[#07070a]/90">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-full bg-blue-900/30 p-2">
-                      <span className="text-blue-400"></span>
+                    <div className="rounded-full bg-purple-900/30 p-2 border border-purple-800/50">
+                      <span className="text-purple-400">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                      </span>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-100">{formatNumber(stats.users.total)}</p>
+                      <p className="text-2xl font-bold text-gray-100">
+                        {stats ? <CountUp to={stats.users.total} /> : "..."}
+                      </p>
                       <p className="text-sm text-gray-500">Total Users</p>
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-4 text-xs">
-                    <span className="text-yellow-400">{stats.users.admins} admins</span>
-                    <span className="text-gray-400">{stats.users.regular} regular</span>
+                  <div className="mt-3 flex gap-4 text-xs font-medium tracking-wide">
+                    <span className="text-purple-400">{stats?.users?.admins ?? 0} ADMINS</span>
+                    <span className="text-gray-400">{stats?.users?.regular ?? 0} REGULAR</span>
                   </div>
-                </div>
+                </SpotlightCard>
 
-                <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                <SpotlightCard className="app-panel-soft rounded-2xl p-5 border border-cyan-900/40 bg-[#04060a]/90">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-full bg-green-900/30 p-2">
-                      <span className="text-green-400"></span>
+                    <div className="rounded-full bg-cyan-900/30 p-2 border border-cyan-800/50">
+                      <span className="text-cyan-400">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3 3h18v18H3V3zm16 16V5H5v14h14zm-4-4h-4v-4h4v4zm-6-6h-2v2h2v-2zm8 0h-2v2h2v-2z"/></svg>
+                      </span>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-100">{formatNumber(stats.projects.total)}</p>
-                      <p className="text-sm text-gray-500">Projects</p>
+                      <p className="text-2xl font-bold text-gray-100">
+                        {stats ? <CountUp to={stats.projects.total} /> : "..."}
+                      </p>
+                      <p className="text-sm text-gray-500">Active Projects</p>
                     </div>
                   </div>
-                </div>
+                </SpotlightCard>
 
-                <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                <SpotlightCard className="app-panel-soft rounded-2xl p-5 border border-emerald-900/40 bg-[#040a08]/90">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-full bg-purple-900/30 p-2">
-                      <span className="text-purple-400"></span>
+                    <div className="rounded-full bg-emerald-900/30 p-2 border border-emerald-800/50">
+                      <span className="text-emerald-400">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                      </span>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-100">{formatNumber(stats.tasks.total)}</p>
-                      <p className="text-sm text-gray-500">Tasks</p>
+                      <p className="text-2xl font-bold text-gray-100">
+                        {stats ? <CountUp to={stats.tasks.total} /> : "..."}
+                      </p>
+                      <p className="text-sm text-gray-500">Tasks Executed</p>
                     </div>
                   </div>
-                  <div className="mt-3 text-xs text-green-400">
-                    {stats.tasks.completed} completed ({Math.round((stats.tasks.completed / stats.tasks.total) * 100) || 0}%)
+                  <div className="mt-3 text-xs font-medium tracking-wide text-emerald-500">
+                    {stats ? <CountUp to={stats.tasks.completed} /> : "..."} COMPLETED 
+                    ({stats ? Math.round((stats.tasks.completed / stats.tasks.total) * 100) || 0 : 0}%)
                   </div>
-                </div>
+                </SpotlightCard>
 
-                <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-4">
+                <SpotlightCard className="app-panel-soft rounded-2xl p-5 border border-indigo-900/40 bg-[#05040a]/90">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-full bg-indigo-900/30 p-2">
-                      <span className="text-indigo-400"></span>
+                    <div className="rounded-full bg-indigo-900/30 p-2 border border-indigo-800/50">
+                      <span className="text-indigo-400">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+                      </span>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-100">{formatNumber(stats.agentRuns.total)}</p>
-                      <p className="text-sm text-gray-500">Agent Runs</p>
+                      <p className="text-2xl font-bold text-gray-100">
+                        {stats ? <CountUp to={stats.agentRuns.total} /> : "..."}
+                      </p>
+                      <p className="text-sm text-gray-500">AI Agent Runs</p>
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-4 text-xs">
-                    <span className="text-green-400">{stats.agentRuns.completed} success</span>
-                    <span className="text-red-400">{stats.agentRuns.failed} failed</span>
+                  <div className="mt-3 flex gap-4 text-xs font-medium tracking-wide">
+                    <span className="text-emerald-400">
+                      {stats ? <CountUp to={stats.agentRuns.completed} /> : 0} SUCCESS
+                    </span>
+                    <span className="text-pink-400">
+                      {stats ? <CountUp to={stats.agentRuns.failed} /> : 0} FAILED
+                    </span>
                   </div>
-                </div>
+                </SpotlightCard>
               </div>
-            )}
 
             {/* System Health */}
             {systemHealth && (
@@ -696,29 +715,28 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Recent Activity */}
-            <div className="rounded-lg border border-gray-700 bg-[#1a1f2e] p-6">
-              <h3 className="text-lg font-semibold text-gray-100 mb-4">Recent Activity</h3>
-              <div className="space-y-3">
+            <div className="app-panel-soft rounded-lg p-6 mt-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Recent Activity</h3>
+              <AnimatedList delay={800}>
                 {auditLogs.slice(0, 10).map((log) => {
                   const meta = actionBadge(log.action);
                   return (
-                    <div key={log.id} className="flex items-center gap-3 p-3 rounded-lg bg-[#22283a] border border-gray-700">
+                    <div key={log.id} className="flex items-center gap-3 p-3 rounded-lg bg-[rgba(255,255,255,0.02)] border border-white/5 hover:border-white/20 transition-colors">
                       <span className="text-lg">{meta.icon}</span>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-medium ${meta.color}`}>{meta.label}</span>
-                          <span className="text-xs text-gray-500">by {log.email}</span>
-                          <span className="text-xs text-gray-600">{timeAgo(log.createdAt)}</span>
+                          <span className="text-xs text-gray-500">by <span className="text-gray-300">{log.email}</span></span>
+                          <span className="text-xs text-gray-600 ml-auto">{timeAgo(log.createdAt)}</span>
                         </div>
                         {metaSummary(log.action, log.meta) && (
-                          <p className="text-xs text-gray-400 mt-1">{metaSummary(log.action, log.meta)}</p>
+                          <p className="text-xs text-gray-500 mt-1.5">{metaSummary(log.action, log.meta)}</p>
                         )}
                       </div>
                     </div>
                   );
                 })}
-              </div>
+              </AnimatedList>
             </div>
           </div>
         ) : tab === "users" ? (
