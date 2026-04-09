@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -316,17 +317,21 @@ async def delete_user(
 
 @router.get("/stats")
 async def get_admin_stats(user: AuthUser = Depends(require_role("admin"))):
-    users = _canonical_users()
-    projects = _list_docs("projects")
-    tasks = _list_docs("tasks")
-    agent_runs = _list_docs("agentRuns")
-    audit_logs = _list_docs("audit_logs")
-    plan_runs = _list_docs("aiPlanRuns")
+    def _fetch():
+        users = _canonical_users()
+        projects = list(db.collection("projects").stream())
+        tasks = list(db.collection("tasks").stream())
+        agent_runs = list(db.collection("agentRuns").stream())
+        audit_logs_count = len(list(db.collection("audit_logs").limit(1000).stream()))
+        plan_runs = list(db.collection("aiPlanRuns").stream())
+        return users, projects, tasks, agent_runs, audit_logs_count, plan_runs
 
-    completed_tasks = sum(1 for task in tasks if task.get("status") == "COMPLETED")
-    completed_runs = sum(1 for run in agent_runs if run.get("status") == "COMPLETED")
-    failed_runs = sum(1 for run in agent_runs if run.get("status") == "FAILED")
-    total_tokens = sum(int(run.get("tokensUsed", 0) or 0) for run in agent_runs + plan_runs)
+    users, projects, tasks, agent_runs, audit_logs_count, plan_runs = await asyncio.get_event_loop().run_in_executor(None, _fetch)
+
+    completed_tasks = sum(1 for task in tasks if task.to_dict().get("status") == "COMPLETED")
+    completed_runs = sum(1 for run in agent_runs if run.to_dict().get("status") == "COMPLETED")
+    failed_runs = sum(1 for run in agent_runs if run.to_dict().get("status") == "FAILED")
+    total_tokens = sum(int(run.to_dict().get("tokensUsed", 0) or 0) for run in agent_runs + plan_runs)
 
     return {
         "users": {
@@ -337,7 +342,7 @@ async def get_admin_stats(user: AuthUser = Depends(require_role("admin"))):
         "projects": {"total": len(projects)},
         "tasks": {"total": len(tasks), "completed": completed_tasks},
         "agentRuns": {"total": len(agent_runs), "completed": completed_runs, "failed": failed_runs},
-        "auditLogs": {"total": len(audit_logs)},
+        "auditLogs": {"total": audit_logs_count},
         "tokens": {"total": total_tokens},
     }
 
@@ -380,12 +385,10 @@ async def list_audit_logs(
 
 @router.get("/projects")
 async def list_projects(user: AuthUser = Depends(require_role("admin"))):
-    task_counts = _task_counts_by_project()
-    projects = sorted(
-        _list_docs("projects"),
-        key=lambda project: project.get("createdAt", ""),
-        reverse=True,
-    )
+    def _fetch():
+        return _task_counts_by_project(), _list_docs("projects")
+    task_counts, projects = await asyncio.get_event_loop().run_in_executor(None, _fetch)
+    projects = sorted(projects, key=lambda project: project.get("createdAt", ""), reverse=True)
     return [
         {
             **project,
@@ -488,8 +491,9 @@ async def admin_delete_project(
 
 @router.get("/token-usage")
 async def list_token_usage(user: AuthUser = Depends(require_role("admin"))):
-    users = _canonical_users()
-    usage = _token_usage_by_user()
+    def _fetch():
+        return _canonical_users(), _token_usage_by_user()
+    users, usage = await asyncio.get_event_loop().run_in_executor(None, _fetch)
     return [
         {
             "uid": item.get("uid", item["id"]),
