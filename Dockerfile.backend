@@ -1,17 +1,14 @@
-FROM python:3.11-slim
-
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies via uv (cached layer)
-COPY pyproject.toml .
-RUN uv sync --no-dev
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-# Copy source
+COPY requirements.txt .
+RUN pip install --no-cache-dir --timeout=120 -r requirements.txt
+
 COPY . .
 
 EXPOSE 4000
 
-CMD ["uv", "run", "python", "server.py"]
+CMD ["python", "server.py"]
