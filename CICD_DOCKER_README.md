@@ -1,130 +1,156 @@
-# CI/CD + Docker + Jenkins — ADW Setup Guide
+# Docker & Jenkins Setup Guide
 
-> Complete guide for Docker containerization, Jenkins CI/CD pipeline and deployment.
-
----
-
-## Project Structure
-
-```
-Autonomous-Developer-Workspace/
-├── backend/                    Python / FastAPI backend
-├── frontend/                   Next.js frontend
-├── ai-services/                AI Agents
-├── Dockerfile.backend          Backend container build
-├── Dockerfile.frontend         Frontend container build
-├── docker-compose.yml          Run full stack together
-├── Jenkinsfile                 Jenkins pipeline
-├── server.py                   Backend entry point
-├── requirements.txt            Python dependencies
-└── CICD_DOCKER_README.md       This file
-```
+This guide explains how to run the ADW project using Docker and Jenkins CI/CD.
 
 ---
 
-## How It Works
+## Prerequisites
 
-```
-GitHub → Jenkins → Docker → Firebase Firestore
-                      ↓
-              adw-backend  :4000
-              adw-frontend :3000
-```
+Make sure the following are installed on your server:
+
+- Docker
+- Docker Compose v2
+- Jenkins (with Docker access)
 
 ---
 
-## Quick Start
+## Running with Docker (Quick Start)
 
-### Run with Docker
+### 1. Clone the repository
+
 ```bash
-docker-compose up -d --build
+git clone https://github.com/atharvakanchan25/Autonomous-Developer-Workspace.git
+cd Autonomous-Developer-Workspace
+git checkout feature/varad-cicd-docker-main
 ```
-Open → http://localhost:3000
 
-### Run Manually (Development)
+### 2. Create the external Docker network (one time only)
+
 ```bash
-# Terminal 1 - Backend
-python server.py
-
-# Terminal 2 - Frontend
-cd frontend
-npm run dev
+docker network create devops-app_default
 ```
 
----
+> Skip this if the network already exists. You will see an error saying "network with name devops-app_default already exists" — that is fine.
 
-## Environment Variables
+### 3. Set up your environment file
 
-Create `.env` at project root:
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in your credentials:
+
 ```env
-APP_ENV=development
-PORT=4000
 GROQ_API_KEY=your-groq-api-key
-FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_PROJECT_ID=your-firebase-project-id
 FIREBASE_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_KEY\n-----END PRIVATE KEY-----\n"
-ADMIN_EMAILS=admin@example.com
+ADMIN_EMAILS=your@email.com
+APP_ENV=production
+PORT=4000
 CORS_ORIGIN=http://localhost:3000
 ```
 
-Create `frontend/.env.local`:
-```env
-NEXT_PUBLIC_API_URL=http://localhost:4000
-NEXT_PUBLIC_FIREBASE_API_KEY=your-key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+### 4. Build and run
+
+```bash
+docker compose up --build -d
+```
+
+### 5. Access the app
+
+| Service  | URL                        |
+|----------|----------------------------|
+| Frontend | http://localhost:3000       |
+| Backend  | http://localhost:4000       |
+| API Docs | http://localhost:4000/docs  |
+
+### Useful commands
+
+```bash
+docker compose logs -f              # tail all logs
+docker compose logs -f backend      # backend logs only
+docker compose down                 # stop containers
+docker compose up --build -d        # rebuild and restart
+docker compose restart backend      # restart backend only
 ```
 
 ---
 
-## Jenkins Setup
+## Running via Jenkins CI/CD
 
-1. Go to http://localhost:8081
-2. New Item → Pipeline → Name: `ADW`
-3. Pipeline from SCM → Git
-4. Repo: `https://github.com/atharvakanchan25/Autonomous-Developer-Workspace`
-5. Branch: `*/main`
-6. Script Path: `Jenkinsfile`
-7. Save → Build Now
+Jenkins automates the full build and deploy process on every manual trigger.
 
----
+### Pipeline stages
 
-## Ports
+| Stage        | What it does                                      |
+|--------------|---------------------------------------------------|
+| Checkout     | Pulls latest code from GitHub branch              |
+| Build        | Builds backend and frontend Docker images         |
+| Deploy       | Removes old containers and starts new ones        |
+| Health Check | Waits 10 seconds and checks backend is running    |
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:3000 |
-| Backend | http://localhost:4000 |
-| API Docs | http://localhost:4000/docs |
-| Jenkins | http://localhost:8081 |
+### Setting up the Jenkins job
 
----
+1. Go to Jenkins → **New Item** → **Pipeline** → name it `ADW`
+2. Under **Pipeline** section:
+   - Definition: `Pipeline script from SCM`
+   - SCM: `Git`
+   - Repository URL: `https://github.com/atharvakanchan25/Autonomous-Developer-Workspace.git`
+   - Branch: `*/feature/varad-cicd-docker-main`
+   - Script Path: `Jenkinsfile`
+3. Save
 
-## Docker Commands
+### Before first build
+
+Make sure the `.env` file exists in the Jenkins workspace:
 
 ```bash
-docker-compose up -d --build    # Build and start
-docker-compose down             # Stop
-docker logs adw-backend -f      # Backend logs
-docker logs adw-frontend -f     # Frontend logs
-docker ps                       # Check containers
+# Run this on the server where Jenkins is running
+docker exec -it jenkins bash
+cp /var/jenkins_home/workspace/ADW/.env.example /var/jenkins_home/workspace/ADW/.env
+# Then edit the .env with your credentials
+```
+
+Or copy it directly from your machine:
+
+```bash
+docker cp .env jenkins:/var/jenkins_home/workspace/ADW/.env
+```
+
+### Trigger a build
+
+Click **Build Now** in Jenkins. The pipeline will:
+1. Pull latest code from GitHub
+2. Build both Docker images
+3. Stop old containers and start new ones
+4. Run a health check
+
+### After successful build
+
+- Frontend: `http://<server-ip>:3000`
+- Backend: `http://<server-ip>:4000`
+
+---
+
+## Project Structure (Docker)
+
+```
+Dockerfile.backend     # Python 3.12 backend image
+Dockerfile.frontend    # Node 18 multi-stage frontend image
+docker-compose.yml     # Defines backend + frontend services
+Jenkinsfile            # CI/CD pipeline definition
+.env.example           # Environment variable template
 ```
 
 ---
 
 ## Troubleshooting
 
-**Port in use**
-```bash
-netstat -ano | findstr :3000
-taskkill /PID <PID> /F
-docker-compose up -d
-```
-
-**Backend not starting** — check `.env` exists at project root
-
-**Admin dashboard empty** — log out and log back in
-
----
-
-Made by Varad Mandhare
+| Problem | Solution |
+|---|---|
+| `network devops-app_default not found` | Run `docker network create devops-app_default` |
+| `.env not found` error in Jenkins | Copy `.env` into Jenkins workspace (see above) |
+| Container name conflict | Run `docker rm -f adw-backend adw-frontend` then retry |
+| Port already in use | Check `docker ps` and stop conflicting containers |
+| Build fails on pip install | Check internet connectivity on the server |
