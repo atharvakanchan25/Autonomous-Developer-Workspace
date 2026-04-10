@@ -51,33 +51,29 @@ async def get_current_user(
 
     admin_emails = [e.strip() for e in config.ADMIN_EMAILS.split(",") if e.strip()]
 
-    # Fetch role from Firestore — single source of truth
     doc = db.collection("users").document(uid).get()
     if doc.exists:
-        user_data = doc.to_dict()
-        role = user_data.get("role", "user")
+        stored = doc.to_dict()
+        role = stored.get("role", "user")
+        if role not in ROLES:
+            role = "user"
         # Auto-upgrade to admin if email is in ADMIN_EMAILS
         if email in admin_emails and role != "admin":
             db.collection("users").document(uid).update({"role": "admin", "updatedAt": now_iso()})
             role = "admin"
             logger.info(f"Auto-upgraded {email} to admin via ADMIN_EMAILS")
+        if stored.get("email") != email:
+            db.collection("users").document(uid).update({"email": email, "updatedAt": now_iso()})
         logger.info(f"Auth check: {email} -> role: {role}")
     else:
-        # Clean up any stale email-keyed placeholder docs first
         for ed in db.collection("users").where("email", "==", email).stream():
             ed.reference.delete()
-
-        # New user — assign role based on ADMIN_EMAILS
         role = "admin" if email in admin_emails else "user"
         db.collection("users").document(uid).set({
-            "uid": uid,
-            "email": email,
-            "role": role,
-            "createdAt": now_iso(),
-            "updatedAt": now_iso(),
+            "uid": uid, "email": email, "role": role,
+            "createdAt": now_iso(), "updatedAt": now_iso(),
         })
         logger.info(f"Created user {email} with role {role}")
-
     return AuthUser(uid=uid, email=email, role=role)
 
 

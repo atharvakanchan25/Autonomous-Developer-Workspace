@@ -8,6 +8,8 @@ import { api } from "@/lib/api";
 import type { Project } from "@/types";
 import { PageShell } from "@/components/PageShell";
 import { duration, ease, buttonTap, staggerContainer, fadeUp } from "@/lib/motion";
+import { BlurText } from "@/components/ui/BlurText";
+import { Aurora } from "@/components/ui/Aurora";
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -72,19 +74,14 @@ export default function HomePage() {
 
   return (
     <PageShell>
-      {/* ── Ambient orbs ── */}
+      {/* ── Animated Aurora background ── */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
-        <div
-          className="absolute -top-40 left-1/2 -translate-x-1/2 h-[520px] w-[520px] rounded-full opacity-20"
-          style={{ background: "radial-gradient(circle, #2dd4bf 0%, transparent 70%)", filter: "blur(72px)" }}
-        />
-        <div
-          className="absolute top-1/3 -right-32 h-[380px] w-[380px] rounded-full opacity-10"
-          style={{ background: "radial-gradient(circle, #f59e0b 0%, transparent 70%)", filter: "blur(80px)" }}
-        />
-        <div
-          className="absolute bottom-0 -left-24 h-[320px] w-[320px] rounded-full opacity-10"
-          style={{ background: "radial-gradient(circle, #6366f1 0%, transparent 70%)", filter: "blur(80px)" }}
+        <Aurora
+          colorStops={["#18181b", "#0f0f11", "#000000"]}
+          amplitude={0.5}
+          blend={0.3}
+          speed={0.2}
+          className="opacity-50"
         />
       </div>
 
@@ -112,17 +109,8 @@ export default function HomePage() {
             className="app-title text-5xl font-semibold leading-[1.12] tracking-tight text-gray-50 sm:text-6xl"
             style={{ letterSpacing: "-0.04em" }}
           >
-            Describe it.
-            <br />
-            <span
-              style={{
-                background: "linear-gradient(135deg, #2dd4bf 0%, #6366f1 60%, #f59e0b 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              Ship it.
-            </span>
+            <BlurText text="Describe it." stepDelay={90} delay={100} className="block text-white" />
+            <BlurText text="Ship it." stepDelay={90} delay={350} className="text-gray-400" />
           </h1>
           <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-[var(--text-secondary)]">
             Tell the AI what you want to build. It plans, codes, tests, reviews, and deploys — automatically.

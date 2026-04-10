@@ -15,6 +15,7 @@ from agents.runners.code_generator import CodeGeneratorAgent
 from agents.runners.test_generator import TestGeneratorAgent
 from agents.runners.code_reviewer import CodeReviewerAgent
 from agents.runners.scaffold_agent import ScaffoldAgent
+from agents.runners.frontend_generator import FrontendGeneratorAgent
 from core.database import db
 from core.errors import not_found, bad_request
 from core.logger import logger
@@ -28,6 +29,7 @@ def bootstrap_agents() -> None:
     register_agent(TestGeneratorAgent())
     register_agent(CodeReviewerAgent())
     register_agent(ScaffoldAgent())
+    register_agent(FrontendGeneratorAgent())
     logger.info(f"All agents registered: {[a.type.value for a in list_agents()]}")
 
 
@@ -72,7 +74,6 @@ async def list_agent_runs(task_id: str, user: AuthUser = Depends(get_current_use
     task_doc = db.collection("tasks").document(task_id).get()
     if not task_doc.exists:
         raise not_found("Task")
-
     runs = db.collection("agentRuns").where("taskId", "==", task_id).order_by("createdAt").stream()
     return [{"id": d.id, **d.to_dict()} for d in runs]
 

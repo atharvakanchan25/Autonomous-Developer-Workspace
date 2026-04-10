@@ -4,38 +4,58 @@
 
 @layer base {
   :root {
-    --bg: #08111a;
-    --bg-elevated: #0f1c28;
-    --surface: rgba(13, 26, 38, 0.82);
-    --surface-strong: rgba(19, 36, 52, 0.94);
-    --surface-soft: rgba(10, 19, 29, 0.7);
-    --border: rgba(128, 160, 184, 0.2);
-    --border-strong: rgba(128, 160, 184, 0.34);
-    --text-primary: #eff6ff;
-    --text-secondary: #9fb3c8;
-    --text-muted: #6e8196;
-    --accent: #2dd4bf;
-    --accent-strong: #14b8a6;
-    --accent-contrast: #061a18;
-    --accent-warm: #f59e0b;
-    --danger: #f87171;
-    --success: #34d399;
-    --shadow-soft: 0 18px 48px rgba(2, 8, 23, 0.38);
-    --shadow-strong: 0 32px 80px rgba(2, 8, 23, 0.52);
+    /* ── Backgrounds ── */
+    --bg:             #000000;
+    --bg-elevated:    #0a0a0a;
+    --bg-inset:       #050505;
+
+    /* ── Surfaces (cards, panels) ── */
+    --surface:        #000000;
+    --surface-strong: #0a0a0a;
+    --surface-soft:   #050505;
+
+    /* ── Borders ── */
+    --border:         rgba(255, 255, 255, 0.1);
+    --border-strong:  rgba(255, 255, 255, 0.2);
+    --border-focus:   rgba(255, 255, 255, 0.4);
+
+    /* ── Text ── */
+    --text-primary:   #ededed;
+    --text-secondary: #a1a1aa;
+    --text-muted:     #71717a;
+
+    /* ── Accent: Minimal White ── */
+    --accent:         #ffffff;
+    --accent-strong:  #f4f4f5;
+    --accent-dim:     rgba(255, 255, 255, 0.1);
+    --accent-contrast:#000000;
+
+    /* ── Semantic ── */
+    --warn:           #fbbf24;
+    --danger:         #ef4444;
+    --success:        #10b981;
+    --info:           #3b82f6;
+
+    /* ── Shadows ── */
+    --shadow-xs:      0 1px 2px rgba(0,0,0,0.5);
+    --shadow-sm:      0 4px 12px rgba(0,0,0,0.5);
+    --shadow-md:      0 8px 24px rgba(0,0,0,0.6);
+    --shadow-lg:      0 24px 48px rgba(0,0,0,0.7);
+    --shadow-soft:    0 8px 24px rgba(0,0,0,0.4);
+    --shadow-strong:  0 20px 60px rgba(0,0,0,0.8);
+    --shadow-accent:  0 0 0 1px rgba(255,255,255,0.2), 0 8px 24px rgba(255,255,255,0.05);
   }
 
   html {
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    scroll-behavior: smooth;
   }
 
   body {
     min-height: 100vh;
-    background:
-      radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 28%),
-      radial-gradient(circle at top right, rgba(245, 158, 11, 0.14), transparent 24%),
-      linear-gradient(180deg, #09131d 0%, #071019 42%, #050b12 100%);
+    background: var(--bg);
     color: var(--text-primary);
-    font-family: var(--font-manrope), sans-serif;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   }
 
   * {
@@ -46,81 +66,79 @@
 
   a, button, input, textarea, select {
     transition:
-      color 160ms ease,
-      background-color 160ms ease,
-      border-color 160ms ease,
-      box-shadow 160ms ease,
-      transform 160ms ease;
+      color 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease,
+      box-shadow 150ms ease,
+      opacity 150ms ease,
+      transform 120ms ease;
   }
 
   ::selection {
-    background: rgba(45, 212, 191, 0.3);
+    background: rgba(255, 255, 255, 0.2);
     color: var(--text-primary);
   }
 }
 
 @layer utilities {
+  /* ── Display font ── */
   .font-display {
     font-family: var(--font-sora), sans-serif;
   }
 
+  /* ── App shell ── */
   .app-shell {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%),
-      linear-gradient(135deg, rgba(45, 212, 191, 0.06), transparent 36%);
+    background: var(--bg);
   }
 
-  .app-shell::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-      linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 90%);
-  }
-
+  /* ── Glass panels - updated to minimal flat cards ── */
   .app-panel {
     border: 1px solid var(--border);
     background: var(--surface);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px);
+    box-shadow: var(--shadow-sm);
   }
 
   .app-panel-strong {
     border: 1px solid var(--border-strong);
     background: var(--surface-strong);
-    box-shadow: var(--shadow-strong);
-    backdrop-filter: blur(22px);
+    box-shadow: var(--shadow-md);
   }
 
   .app-panel-soft {
-    border: 1px solid rgba(128, 160, 184, 0.12);
+    border: 1px solid var(--border);
     background: var(--surface-soft);
-    backdrop-filter: blur(14px);
   }
 
+  /* ── Topbar ── */
   .app-topbar {
     border-bottom: 1px solid var(--border);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent),
-      rgba(8, 17, 26, 0.7);
-    backdrop-filter: blur(20px);
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
 
+  /* ── Title ── */
   .app-title {
     font-family: var(--font-sora), sans-serif;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.04em;
   }
 
+  /* ── Gradient text ── */
+  .app-gradient-text {
+    background: linear-gradient(180deg, #fff 0%, #a1a1aa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Inputs ── */
   .app-input {
-    border: 1px solid rgba(128, 160, 184, 0.2);
-    background: rgba(6, 14, 22, 0.82);
+    border: 1px solid var(--border);
+    background: var(--bg-inset);
     color: var(--text-primary);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    font-size: 0.875rem;
   }
 
   .app-input::placeholder {
@@ -128,93 +146,110 @@
   }
 
   .app-input:focus {
-    border-color: rgba(45, 212, 191, 0.62);
+    border-color: var(--border-focus);
     outline: none;
-    box-shadow:
-      0 0 0 4px rgba(45, 212, 191, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
   }
 
+  /* ── Primary button ── */
   .app-button-primary {
-    background: linear-gradient(135deg, var(--accent) 0%, #0ea5a0 100%);
-    color: #041311;
-    box-shadow: 0 14px 30px rgba(20, 184, 166, 0.28);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 500;
+    font-size: 0.875rem;
+    border-radius: 6px;
+    letter-spacing: -0.01em;
   }
 
   .app-button-primary:hover {
-    filter: brightness(1.03);
+    background: var(--accent-strong);
     transform: translateY(-1px);
   }
 
-  .app-button-primary:disabled {
-    filter: saturate(0.6);
-    opacity: 0.55;
-    transform: none;
-    box-shadow: none;
+  .app-button-primary:active {
+    transform: translateY(0);
+    filter: brightness(0.9);
   }
 
+  .app-button-primary:disabled {
+    opacity: 0.4;
+    transform: none;
+    cursor: not-allowed;
+  }
+
+  /* ── Secondary button ── */
   .app-button-secondary {
-    border: 1px solid rgba(128, 160, 184, 0.24);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    background: transparent;
     color: var(--text-secondary);
+    font-size: 0.875rem;
+    border-radius: 6px;
   }
 
   .app-button-secondary:hover {
-    border-color: rgba(128, 160, 184, 0.36);
-    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--border-strong);
+    background: rgba(255,255,255,0.05);
     color: var(--text-primary);
   }
 
+  /* ── Chip / tag ── */
   .app-chip {
-    border: 1px solid rgba(128, 160, 184, 0.14);
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
     color: var(--text-secondary);
+    font-size: 0.75rem;
+    border-radius: 4px;
   }
 
+  /* ── Empty state ── */
   .app-empty {
-    border: 1px dashed rgba(128, 160, 184, 0.22);
-    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--border);
+    background: transparent;
   }
 
+  /* ── Auth shell ── */
   .app-auth-shell {
     position: relative;
     overflow: hidden;
+    background: var(--bg);
   }
 
-  .app-auth-shell::before,
-  .app-auth-shell::after {
-    content: "";
-    position: absolute;
-    border-radius: 9999px;
-    filter: blur(80px);
-    opacity: 0.55;
-    pointer-events: none;
+  /* ── Glow helpers ── */
+  .app-glow {
+    box-shadow: var(--shadow-accent);
   }
 
-  .app-auth-shell::before {
-    top: -120px;
-    left: -80px;
-    width: 280px;
-    height: 280px;
-    background: rgba(45, 212, 191, 0.2);
+  /* ── Dividers ── */
+  .app-divider {
+    border-color: var(--border);
   }
 
-  .app-auth-shell::after {
-    right: -80px;
-    bottom: -120px;
-    width: 320px;
-    height: 320px;
-    background: rgba(245, 158, 11, 0.18);
-  }
-
+  /* ── Scrollbar ── */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(128, 160, 184, 0.38) transparent;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
   }
-  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
-  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(128, 160, 184, 0.38);
+  .scrollbar-thin::-webkit-scrollbar        { width: 5px; height: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-track  { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb  {
+    background: rgba(255,255,255,0.1);
     border-radius: 9999px;
   }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
+  /* ── Keyframes ── */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0);   }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .animate-fade-up   { animation: fade-up 0.4s ease forwards; }
+  .animate-fade-in   { animation: fade-in 0.3s ease forwards; }
 }

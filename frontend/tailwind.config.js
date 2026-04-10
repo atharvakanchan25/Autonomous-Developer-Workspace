@@ -7,21 +7,35 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        sans:    ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-sora)", "ui-sans-serif", "sans-serif"],
+        mono:    ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
-        brand: {
-          50:  "#EEF2FF",
-          100: "#E0E7FF",
-          500: "#6366F1",
-          600: "#4F46E5",
-          700: "#4338CA",
+        accent: {
+          DEFAULT: "#ffffff",
+          strong:  "#f4f4f5",
+          dim:     "rgba(255,255,255,0.1)",
         },
       },
       boxShadow: {
-        card: "0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04)",
-        "card-hover": "0 4px 12px 0 rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.04)",
+        card:          "0 1px 3px rgba(0,0,0,0.5)",
+        "card-hover":  "0 4px 12px rgba(0,0,0,0.5)",
+        "glow-accent": "0 0 0 1px rgba(255,255,255,0.2), 0 8px 24px rgba(255,255,255,0.05)",
+      },
+      keyframes: {
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to:   { opacity: "1", transform: "translateY(0)" },
+        },
+        "fade-in": {
+          from: { opacity: "0" },
+          to:   { opacity: "1" },
+        },
+      },
+      animation: {
+        "fade-up":   "fade-up 0.4s ease forwards",
+        "fade-in":   "fade-in 0.3s ease forwards",
       },
       transitionDuration: {
         DEFAULT: "150ms",

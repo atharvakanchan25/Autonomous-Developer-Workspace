@@ -21,7 +21,7 @@ from langgraph.graph import StateGraph, END
 
 from agents.agent_dispatcher import (
     dispatch_agent, DispatchResult, _get_task,
-    _persist_artifacts, _maybe_run_scaffold,
+    _persist_artifacts, _maybe_run_scaffold, _maybe_run_frontend_generator,
 )
 from agents.agent_types import AgentType, AgentResult
 from core.database import db
@@ -163,6 +163,7 @@ async def run_langgraph_pipeline(task_id: str) -> list[DispatchResult]:
             logger.error(f"Failed to persist artifacts: {err}", exc_info=True)
 
         asyncio.create_task(_maybe_run_scaffold(project_id))
+        asyncio.create_task(_maybe_run_frontend_generator(project_id))
 
     logger.info(f"LangGraph pipeline finished: task={task_id} status={final_status} stages={len(results)}")
     return results

@@ -129,6 +129,7 @@ async def delete_project(project_id: str, user: AuthUser = Depends(get_current_u
     }
 
     tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
+
     deleted_counts["tasks"] = _delete_docs(tasks)
 
     files = list(db.collection("files").where("projectId", "==", project_id).stream())

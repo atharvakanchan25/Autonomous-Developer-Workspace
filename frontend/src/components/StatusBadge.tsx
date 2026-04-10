@@ -5,17 +5,17 @@ import type { TaskStatus } from "@/types";
 import { duration, ease } from "@/lib/motion";
 
 const styles: Record<TaskStatus, string> = {
-  PENDING:     "bg-gray-800 text-gray-400",
-  IN_PROGRESS: "bg-indigo-900/60 text-indigo-300",
-  COMPLETED:   "bg-green-900/60 text-green-300",
-  FAILED:      "bg-red-900/60 text-red-300",
+  PENDING:     "border border-white/10 bg-white/5 text-gray-400",
+  IN_PROGRESS: "border border-cyan-500/30 bg-cyan-500/10 text-cyan-400",
+  COMPLETED:   "border border-purple-500/30 bg-purple-500/10 text-purple-400",
+  FAILED:      "border border-pink-500/30 bg-pink-500/10 text-pink-400",
 };
 
 const dots: Record<TaskStatus, string> = {
-  PENDING:     "bg-gray-400",
-  IN_PROGRESS: "bg-indigo-500",
-  COMPLETED:   "bg-green-500",
-  FAILED:      "bg-red-500",
+  PENDING:     "bg-gray-500",
+  IN_PROGRESS: "bg-cyan-400",
+  COMPLETED:   "bg-purple-400",
+  FAILED:      "bg-pink-500",
 };
 
 const labels: Record<TaskStatus, string> = {

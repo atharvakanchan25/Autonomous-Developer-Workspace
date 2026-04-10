@@ -5,8 +5,12 @@ from typing import Optional
 import sys
 from pathlib import Path
 
-# Add backend to Python path
-sys.path.append(str(Path(__file__).parent.parent.parent / "backend"))
+# Robust path resolution — works regardless of cwd or how the process was started
+_root = Path(__file__).resolve().parent.parent.parent  # repo root
+for _p in (_root, _root / "backend", _root / "ai-services"):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
 from core.database import db
 from core.logger import logger
@@ -18,8 +22,6 @@ from realtime.events import AgentLogPayload, PipelineStagePayload, TaskUpdatedPa
 from agents.agent_registry import get_agent
 from agents.agent_types import AgentType, AgentRunStatus, AgentContext, AgentResult
 from backend.lib.mcp_server import build_project_context_text, get_project_snapshot
-
-PIPELINE_ORDER = [AgentType.CODE_GENERATOR, AgentType.TEST_GENERATOR, AgentType.CODE_REVIEWER]
 
 
 @dataclass
@@ -33,7 +35,7 @@ class DispatchResult:
     durationMs: int = 0
 
 
-async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> None:
+async def _persist_artifacts(project_id: str, results: list[DispatchResult], owner_id: str = "") -> None:
     for result in results:
         if result.status != "COMPLETED" or not result.result:
             continue
@@ -76,6 +78,7 @@ async def _persist_artifacts(project_id: str, results: list[DispatchResult]) -> 
             else:
                 files_ref.add({
                     "projectId": project_id,
+                    "ownerId": owner_id,
                     "path": artifact.filename,
                     "name": artifact.filename.split("/")[-1],
                     "language": artifact.language,
@@ -128,7 +131,7 @@ async def dispatch_agent(
         projectId=project_id,
         projectName=project.get("name", ""),
         projectDescription=project.get("description", ""),
-        language=project.get("language", "python").lower(),
+        language=task.get("language", project.get("language", "python")).lower(),
         framework=project.get("framework", ""),
         taskTitle=task["title"],
         taskDescription=task.get("description", task["title"]),
@@ -185,10 +188,17 @@ async def dispatch_agent(
         ))
         logger.info(f"Agent completed: run={run_ref.id} duration={duration_ms}ms")
 
-        return DispatchResult(
+        # Persist artifacts immediately after each agent so files are saved even if later agents fail
+        dispatch_result = DispatchResult(
             agentRunId=run_ref.id, taskId=task_id, agentType=agent_type,
             status="COMPLETED", result=result, durationMs=duration_ms,
         )
+        try:
+            await _persist_artifacts(project_id, [dispatch_result], owner_id=task.get("ownerId", ""))
+        except Exception as persist_err:
+            logger.error(f"Failed to persist artifacts for agent={agent_type.value}: {persist_err}", exc_info=True)
+
+        return dispatch_result
 
     except Exception as err:
         duration_ms = int((time.monotonic() - started_at) * 1000)
@@ -216,70 +226,54 @@ async def dispatch_agent(
         )
 
 
-async def dispatch_pipeline(task_id: str) -> list[DispatchResult]:
-    task = _get_task(task_id)
-    project_id: str = task["projectId"]
 
-    ts = now_iso()
-    db.collection("tasks").document(task_id).update({"status": "IN_PROGRESS", "updatedAt": ts})
-    task_cache.delete(task_id)
-
-    await emitter.emit_task_updated(TaskUpdatedPayload(
-        taskId=task_id, projectId=project_id, status="IN_PROGRESS",
-        title=task["title"], updatedAt=ts,
-    ))
-    await emitter.emit_agent_log(AgentLogPayload(
-        taskId=task_id, projectId=project_id, agentRunId="",
-        agentType="PIPELINE", level="info",
-        message=f'Pipeline started for "{task["title"]}"', timestamp=ts,
-    ))
-    logger.info(f"Pipeline started: task={task_id}")
-
-    results: list[DispatchResult] = []
-    previous_outputs: dict[AgentType, AgentResult] = {}
-
-    for agent_type in PIPELINE_ORDER:
-        result = await dispatch_agent(task_id, agent_type, previous_outputs)
-        results.append(result)
-
-        if result.status == "FAILED":
-            ts = now_iso()
-            db.collection("tasks").document(task_id).update({"status": "FAILED", "updatedAt": ts})
-            task_cache.delete(task_id)
-            await emitter.emit_task_updated(TaskUpdatedPayload(
-                taskId=task_id, projectId=project_id, status="FAILED",
-                title=task["title"], updatedAt=ts,
-            ))
-            logger.error(f"Pipeline aborted at {agent_type.value}")
-            return results
-
-        if result.result:
-            previous_outputs[agent_type] = result.result
-
-    ts = now_iso()
-    db.collection("tasks").document(task_id).update({"status": "COMPLETED", "updatedAt": ts})
-    task_cache.delete(task_id)
-
-    await emitter.emit_task_updated(TaskUpdatedPayload(
-        taskId=task_id, projectId=project_id, status="COMPLETED",
-        title=task["title"], updatedAt=ts,
-    ))
-    await emitter.emit_agent_log(AgentLogPayload(
-        taskId=task_id, projectId=project_id, agentRunId="",
-        agentType="PIPELINE", level="info",
-        message=f'Pipeline completed for "{task["title"]}" — all {len(results)} agents passed',
-        timestamp=ts,
-    ))
-
+async def _maybe_run_frontend_generator(project_id: str) -> None:
+    """Generate a single-file HTML/CSS/JS frontend once per project after all tasks complete."""
     try:
-        await _persist_artifacts(project_id, results)
+        existing = list(
+            db.collection("files")
+            .where("projectId", "==", project_id)
+            .where("path", "==", "frontend/index.html")
+            .limit(1)
+            .stream()
+        )
+        if existing:
+            return
+
+        all_tasks = list(db.collection("tasks").where("projectId", "==", project_id).stream())
+        if not all_tasks or not all(t.to_dict().get("status") == "COMPLETED" for t in all_tasks):
+            return
+
+        project = _get_project(project_id)
+        ctx = AgentContext(
+            taskId="frontend",
+            projectId=project_id,
+            projectName=project.get("name", ""),
+            projectDescription=project.get("description", ""),
+            language="html",
+            framework="",
+            taskTitle="Frontend UI",
+            taskDescription="Generate a single-file HTML/CSS/JS frontend",
+            mcpContext="",
+        )
+
+        from agents.runners.frontend_generator import FrontendGeneratorAgent
+        result = await FrontendGeneratorAgent().run(ctx)
+
+        for artifact in result.artifacts:
+            db.collection("files").add({
+                "projectId": project_id,
+                "path": artifact.filename,
+                "name": artifact.filename.split("/")[-1],
+                "language": artifact.language,
+                "content": artifact.content,
+                "size": len(artifact.content.encode("utf-8")),
+                "createdAt": now_iso(),
+                "updatedAt": now_iso(),
+            })
+        logger.info(f"Frontend generated for project={project_id}")
     except Exception as err:
-        logger.error(f"Failed to persist artifacts: {err}", exc_info=True)
-
-    asyncio.create_task(_maybe_run_scaffold(project_id))
-
-    logger.info(f"Pipeline completed: task={task_id} stages={len(results)}")
-    return results
+        logger.error(f"Frontend generation failed for project={project_id}: {err}", exc_info=True)
 
 
 async def _maybe_run_scaffold(project_id: str) -> None:

@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict, validator
 from typing import Literal
 from pathlib import Path
-from pydantic import ConfigDict
 import os
 
 # Get project root directory
@@ -20,6 +20,12 @@ class Config(BaseSettings):
     LOG_LEVEL: Literal["debug", "info", "warning", "error"] = "info"
     RATE_LIMIT_WINDOW_MS: int = 60_000
     RATE_LIMIT_MAX: int = 200
+    VERCEL_TOKEN: str = ""
+    GITHUB_TOKEN: str = ""
+
+    @validator("CORS_ORIGIN", pre=True)
+    def strip_cors_origin(cls, v: str) -> str:
+        return v.strip()
 
     model_config = ConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),

@@ -44,8 +44,12 @@ async def list_files(
     if not user.can_access_resource(project.get("ownerId")):
         raise not_found("Project")
     
-    docs = db.collection("files").where("projectId", "==", projectId).order_by("path").stream()
-    return [serialize_file(d.id, d.to_dict(), include_content=False) for d in docs]
+    docs = db.collection("files").where("projectId", "==", projectId).stream()
+    files = sorted(
+        [serialize_file(d.id, d.to_dict(), include_content=False) for d in docs],
+        key=lambda f: f["path"],
+    )
+    return files
 
 @router.post("/")
 async def create_file(body: CreateFileRequest, user: AuthUser = Depends(get_current_user)):
