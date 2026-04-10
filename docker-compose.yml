@@ -38,6 +38,23 @@ services:
     networks:
       - devops-app_default
 
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: adw-jenkins
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - devops-app_default
+
+volumes:
+  jenkins_data:
+
 networks:
   devops-app_default:
     external: true
